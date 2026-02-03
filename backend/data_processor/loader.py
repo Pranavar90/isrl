@@ -1,71 +1,45 @@
 import pandas as pd
 import os
-import glob
-from datetime import datetime
 
 class DataProcessor:
-    def __init__(self, raw_data_path):
-        # Handle the extra r4.2 level if present
-        self.raw_path = raw_data_path
-        if os.path.exists(os.path.join(raw_data_path, "r4.2")):
-            self.raw_path = os.path.join(raw_data_path, "r4.2")
-        
-        self.ldap_df = None
+    def __init__(self, data_path="backend/data"):
+        self.data_path = data_path
         self.user_context = {}
 
     def load_ldap(self):
-        """Parse LDAP CSVs to build user peer group (Department/Role) context."""
-        ldap_path = os.path.join(self.raw_path, "LDAP") # Capitalized in some versions
+        """Parse the new ldap_logs.csv to build user context."""
+        ldap_path = os.path.join(self.data_path, "ldap_logs.csv")
         if not os.path.exists(ldap_path):
-            ldap_path = os.path.join(self.raw_path, "ldap")
-            
-        ldap_files = glob.glob(os.path.join(ldap_path, "*.csv"))
-        if not ldap_files:
-            print("No LDAP files found.")
+            print(f"LDAP file not found at {ldap_path}")
             return
 
-        # Load all LDAP records; usually they represent snapshots. 
-        # We'll take the most recent record for each user for current context.
-        all_ldap = []
-        for f in ldap_files:
-            df = pd.read_csv(f)
-            all_ldap.append(df)
-            
-        if all_ldap:
-            self.ldap_df = pd.concat(all_ldap).drop_duplicates(subset=['employee_name'], keep='last')
-            # Create a lookup: user_id -> {dept, role, team}
-            # Note: CERT r4.2 user IDs are often in the format 'ABC0123'
-            # The column names might vary, usually 'user_id' or 'employee_name'
-            # Let's assume standard CERT r4.2 format
-            for _, row in self.ldap_df.iterrows():
-                uid = row.get('user_id')
-                if uid:
-                    self.user_context[uid] = {
-                        'department': row.get('department'),
-                        'role': row.get('role'),
-                        'business_unit': row.get('business_unit')
-                    }
+        df = pd.read_csv(ldap_path)
+        for _, row in df.iterrows():
+            uid = row.get('user')
+            if uid:
+                self.user_context[uid] = {
+                    'department': row.get('department'),
+                    'user_type': row.get('user_type'),
+                    'normal_login_location': row.get('normal_login_location'),
+                    'normal_hour': row.get('normal_hour'),
+                    'trust_score_base': row.get('trust_score_base')
+                }
         print(f"Loaded context for {len(self.user_context)} users.")
 
-    def load_logons(self):
-        """Load logon.csv."""
-        logon_path = os.path.join(self.raw_path, "logon.csv")
-        if os.path.exists(logon_path):
-            return pd.read_csv(logon_path, parse_dates=['date'])
-        return pd.DataFrame()
-
-    def load_file_events(self):
-        """Load file.csv."""
-        file_path = os.path.join(self.raw_path, "file.csv")
-        if os.path.exists(file_path):
-            return pd.read_csv(file_path, parse_dates=['date'])
+    def load_auth_logs(self):
+        """Load the new auth_logs.csv."""
+        auth_path = os.path.join(self.data_path, "auth_logs.csv")
+        if os.path.exists(auth_path):
+            return pd.read_csv(auth_path)
+        print(f"Auth logs not found at {auth_path}")
         return pd.DataFrame()
 
     def get_user_peer_group(self, user_id):
         """Get the department/role for a user."""
-        return self.user_context.get(user_id, {"department": "Unknown", "role": "Unknown"})
+        return self.user_context.get(user_id, {"department": "Unknown", "user_type": "Standard"})
 
 if __name__ == "__main__":
-    # Test loading
-    processor = DataProcessor("backend/data/raw")
-    # processor.load_ldap() # Uncomment when data is ready
+    processor = DataProcessor()
+    processor.load_ldap()
+    df = processor.load_auth_logs()
+    print(f"Loaded {len(df)} auth events.")

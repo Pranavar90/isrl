@@ -66,9 +66,9 @@ const LiveStream = ({ onSelectAlert, selectedId }) => {
                                 {new Date(evt.timestamp).toLocaleTimeString([], { hour12: false })}
                             </span>
                             <div className={cn(
-                                "w-1 h-3 rounded-full",
-                                evt.score > 80 ? "bg-red-900" :
-                                    evt.score > 50 ? "bg-amber-900" : "bg-zinc-800"
+                                "w-1 h-3 rounded-full shadow-sm",
+                                evt.score > 75 ? "bg-red-500 shadow-red-500/50" :
+                                    evt.score > 40 ? "bg-amber-500 shadow-amber-500/50" : "bg-zinc-800"
                             )} />
                         </div>
 
@@ -85,7 +85,8 @@ const LiveStream = ({ onSelectAlert, selectedId }) => {
                             <span className="text-[9px] text-zinc-700 uppercase tracking-tighter">Priority Trace</span>
                             <span className={cn(
                                 "text-[10px] font-mono font-bold",
-                                evt.score > 80 ? "text-red-700" : "text-zinc-600"
+                                evt.score > 75 ? "text-red-500" :
+                                    evt.score > 40 ? "text-amber-500" : "text-zinc-600"
                             )}>
                                 {evt.score}%
                             </span>

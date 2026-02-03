@@ -1,17 +1,26 @@
-# Data
-backend/data/raw/
-*.csv
-*.xml
-
-# Environment
-.env
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+venv/
+env/
+.env
 
-# Node
+# ML Models & Data (Ignore large generated files)
+backend/data/*.csv
+backend/models/*.joblib
+backend/models/*.pth
+backend/models/*.png
+
+# Node / React
 node_modules/
 dist/
+.DS_Store
+*.local
+.vsc-test-results
 
-# ML
-models/*.pkl
-models/*.joblib
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo

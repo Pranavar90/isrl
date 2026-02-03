@@ -4,49 +4,50 @@ import numpy as np
 class FeatureEngineer:
     def __init__(self, user_context):
         self.user_context = user_context
+        self.feature_cols = [
+            'device_trust_score', 
+            'failed_attempts_last_15min', 
+            'hour_deviation', 
+            'location_distance_km', 
+            'ip_category_encoded', 
+            'is_odd_hour_numeric', 
+            'baseline_confidence',
+            'dept_id',
+            'user_type_id',
+            'device_type_id'
+        ]
 
-    def engineer_features(self, logon_df, file_df):
-        """Build daily behavioral features per user."""
-        # 1. Logon Frequency
-        logon_df['date_only'] = logon_df['date'].dt.date
-        user_daily_logon = logon_df.groupby(['user', 'date_only']).size().reset_index(name='logon_count')
+    def engineer_features(self, auth_df):
+        """Prepare features for ML training from the scaled auth dataset."""
+        df = auth_df.copy()
         
-        # 2. File Access Volume
-        file_df['date_only'] = file_df['date'].dt.date
-        user_daily_file = file_df.groupby(['user', 'date_only']).size().reset_index(name='file_count')
+        # Factorize categorical features for numerical consumption
+        df['dept_id'] = df['department'].factorize()[0]
+        df['user_type_id'] = df['user_type'].factorize()[0]
+        df['device_type_id'] = df['device_type'].factorize()[0]
         
-        # Merge features
-        features = pd.merge(user_daily_logon, user_daily_file, on=['user', 'date_only'], how='outer').fillna(0)
-        
-        # 3. Resource Rarity
-        # Calculate how often a specific PC or File is accessed across the whole org
-        pc_counts = logon_df['pc'].value_counts(normalize=True).to_dict()
-        logon_df['pc_rarity'] = logon_df['pc'].map(pc_counts)
-        
-        # Average pc rarity per user per day
-        avg_pc_rarity = logon_df.groupby(['user', 'date_only'])['pc_rarity'].mean().reset_index(name='avg_pc_rarity')
-        features = pd.merge(features, avg_pc_rarity, on=['user', 'date_only'], how='left').fillna(1.0) # 1.0 means common
-        
-        # Add departmental context (numeric encoding for ML)
-        features['dept_id'] = features['user'].apply(lambda x: self.user_context.get(x, {}).get('department', 'Unknown'))
-        features['dept_id'] = pd.factorize(features['dept_id'])[0]
-        
-        return features.drop(columns=['user', 'date_only'])
+        features = df[self.feature_cols].copy()
+        return features.fillna(0)
 
-    def get_user_day_vector(self, user_id, date, logon_df, file_df):
-        """Extract a single feature vector for a specific user-day."""
-        # This would be used during inference
-        day_logons = logon_df[(logon_df['user'] == user_id) & (logon_df['date'].dt.date == date.date())]
-        day_files = file_df[(file_df['user'] == user_id) & (file_df['date'].dt.date == date.date())]
+    def get_user_day_vector(self, event):
+        """Extract a single feature vector for an incoming event (Inference)."""
+        # Mapping known types for consistent inference
+        dept_map = {'Finance': 0, 'HR': 1, 'Sales': 2, 'Database Mgmt': 3, 'Customer Support': 4, 
+                    'IT': 5, 'Legal': 6, 'Marketing': 7, 'Engineering': 8, 'Security': 9}
+        type_map = {'Admin': 0, 'Privileged': 1, 'Standard': 2}
+        dev_map = {'Corporate_Laptop': 0, 'Personal_Laptop': 1, 'Mobile_Device': 2, 'Server': 3}
+
+        vector = [
+            event.get('device_trust_score', 50),
+            event.get('failed_attempts_last_15min', 0),
+            event.get('hour_deviation', 0),
+            event.get('location_distance_km', 0),
+            event.get('ip_category_encoded', 0),
+            event.get('is_odd_hour_numeric', 0),
+            event.get('baseline_confidence', 1),
+            dept_map.get(event.get('department'), 0),
+            type_map.get(event.get('user_type'), 2),
+            dev_map.get(event.get('device_type'), 0)
+        ]
         
-        logon_count = len(day_logons)
-        file_count = len(day_files)
-        
-        pc_counts = logon_df['pc'].value_counts(normalize=True).to_dict()
-        avg_pc_rarity = day_logons['pc'].map(pc_counts).mean() if not day_logons.empty else 1.0
-        
-        dept = self.user_context.get(user_id, {}).get('department', 'Unknown')
-        # Simplified dept_id
-        dept_id = 0 # In real scenario, use consistent mapping
-        
-        return np.array([[logon_count, file_count, avg_pc_rarity, dept_id]])
+        return np.array([vector])

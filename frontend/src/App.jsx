@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import LiveStream from './components/LiveStream';
 import DeepDiveView from './components/DeepDiveView';
+import DataNodes from './components/DataNodes';
+import IdentityMatrix from './components/IdentityMatrix';
+import NotificationsView from './components/NotificationsView';
 import {
   Shield,
   Activity,
@@ -26,9 +29,9 @@ function App() {
   const [notification, setNotification] = useState(null);
   const [connectionStatus, setConnectionStatus] = useState('connecting');
   const [stats, setStats] = useState({
-    totalEvents: 1240,
-    highRisk: 12,
-    monitoredUsers: 450
+    totalEvents: 500000,
+    highRisk: 1420,
+    monitoredUsers: 5000
   });
 
   const handleAction = async (alertId, action) => {
@@ -57,84 +60,10 @@ function App() {
     { id: 'alerts', icon: Bell, label: 'Notifications' },
   ];
 
-  return (
-    <div className="flex h-screen bg-[#09090b] text-zinc-100 overflow-hidden font-sans">
-      {/* Sidebar - Functional & Slim */}
-      <aside className="w-16 border-r border-[#1f1f23] flex flex-col items-center py-6 bg-[#0c0c0e] justify-between z-20">
-        <div className="flex flex-col items-center gap-10">
-          <div className="p-2.5 bg-zinc-900 rounded-lg border border-zinc-800 shadow-2xl">
-            <Activity className="w-5 h-5 text-zinc-400" />
-          </div>
-          <nav className="flex flex-col gap-4">
-            {navItems.map((item) => (
-              <button
-                key={item.id}
-                onClick={() => setCurrentView(item.id)}
-                className={cn(
-                  "p-3 rounded-xl transition-all relative group",
-                  currentView === item.id
-                    ? "bg-zinc-800 text-zinc-100 shadow-lg"
-                    : "text-zinc-600 hover:text-zinc-400 hover:bg-zinc-900"
-                )}
-                title={item.label}
-              >
-                <item.icon className="w-5 h-5" />
-                {currentView === item.id && (
-                  <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-4 bg-zinc-400 rounded-r-full" />
-                )}
-                {/* Tooltip on hover */}
-                <div className="absolute left-20 bg-zinc-900 border border-zinc-800 text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap uppercase tracking-widest z-50">
-                  {item.label}
-                </div>
-              </button>
-            ))}
-          </nav>
-        </div>
-
-        <button className="p-3 text-zinc-600 hover:text-zinc-400 transition-colors">
-          <Settings className="w-5 h-5" />
-        </button>
-      </aside>
-
-      <div className="flex-1 flex flex-col relative">
-        {/* Top Header - Ultra Muted */}
-        <header className="h-14 border-b border-[#1f1f23] flex items-center justify-between px-8 bg-[#09090b]/80 backdrop-blur-xl">
-          <div className="flex items-center gap-3">
-            <div className="w-6 h-px bg-zinc-800" />
-            <span className="text-[10px] font-mono tracking-[0.3em] text-zinc-500 uppercase">
-              Sector_04 // Neural_Link // Terminal_01
-            </span>
-          </div>
-
-          <div className="flex items-center gap-6">
-            <div className="flex items-center gap-4 text-[10px] font-mono text-zinc-500">
-              <span className="flex items-center gap-1.5 font-bold text-zinc-400">
-                <div className={cn(
-                  "w-1.5 h-1.5 rounded-full shadow-[0_0_8px]",
-                  connectionStatus === 'connected' ? "bg-emerald-500 shadow-emerald-500/50" : "bg-amber-500 shadow-amber-500/50 animate-pulse"
-                )} />
-                {connectionStatus.toUpperCase()}
-              </span>
-              <button
-                onClick={() => {
-                  const mock = { id: 'MOCK_' + Date.now(), timestamp: new Date().toISOString(), user: 'TST_USER', pc: 'PC-999', score: 92, summary: 'Manual diagnostic trigger initiated by administrator.' };
-                  setSelectedAlert(mock);
-                }}
-                className="px-2 py-0.5 border border-zinc-800 rounded hover:bg-zinc-800 transition-colors text-[9px]"
-              >
-                SIMULATE_NODE
-              </button>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-full bg-zinc-900 border border-zinc-800 overflow-hidden flex items-center justify-center p-1">
-                <div className="w-full h-full bg-zinc-800 rounded-full" />
-              </div>
-            </div>
-          </div>
-        </header>
-
-        {/* Dynamic View Content */}
-        {currentView === 'dashboard' ? (
+  const renderContent = () => {
+    switch (currentView) {
+      case 'dashboard':
+        return (
           <main className="flex-1 flex overflow-hidden">
             {/* Left Feed - Data Dense */}
             <div className="w-[340px] border-r border-[#1f1f23] flex flex-col bg-[#0c0c0e]/30">
@@ -182,16 +111,80 @@ function App() {
               )}
             </div>
           </main>
-        ) : (
-          <div className="flex-1 flex items-center justify-center">
-            <div className="text-center p-12 border border-zinc-900 rounded-2xl bg-[#0c0c0e]">
-              <AlertCircle className="w-8 h-8 text-zinc-800 mx-auto mb-4" />
-              <h2 className="text-sm font-medium text-zinc-400 mb-2 uppercase tracking-widest">{currentView} Module Encrypted</h2>
-              <p className="text-xs text-zinc-700 font-mono">Insufficient privileges to access high-level database metrics.</p>
+        );
+      case 'nodes':
+        return <div className="flex-1 overflow-y-auto"><DataNodes /></div>;
+      case 'users':
+        return <div className="flex-1 overflow-y-auto"><IdentityMatrix /></div>;
+      case 'alerts':
+        return <div className="flex-1 overflow-y-auto"><NotificationsView /></div>;
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <div className="flex h-screen bg-[#09090b] text-zinc-100 overflow-hidden font-sans">
+      {/* Sidebar - Functional & Slim */}
+      <aside className="w-16 border-r border-[#1f1f23] flex flex-col items-center py-6 bg-[#0c0c0e] justify-between z-20">
+        <div className="flex flex-col items-center gap-10">
+          <div className="p-2.5 bg-zinc-900 rounded-lg border border-zinc-800 shadow-2xl">
+            <Activity className="w-5 h-5 text-zinc-400" />
+          </div>
+          <nav className="flex flex-col gap-4">
+            {navItems.map((item) => (
+              <button
+                key={item.id}
+                onClick={() => setCurrentView(item.id)}
+                className={cn(
+                  "p-3 rounded-xl transition-all relative group",
+                  currentView === item.id
+                    ? "bg-zinc-800 text-zinc-100 shadow-lg"
+                    : "text-zinc-600 hover:text-zinc-400 hover:bg-zinc-900"
+                )}
+                title={item.label}
+              >
+                <item.icon className="w-5 h-5" />
+                {currentView === item.id && (
+                  <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-4 bg-zinc-400 rounded-r-full" />
+                )}
+                <div className="absolute left-20 bg-zinc-900 border border-zinc-800 text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap uppercase tracking-widest z-50">
+                  {item.label}
+                </div>
+              </button>
+            ))}
+          </nav>
+        </div>
+
+        <button className="p-3 text-zinc-600 hover:text-zinc-400 transition-colors">
+          <Settings className="w-5 h-5" />
+        </button>
+      </aside>
+
+      <div className="flex-1 flex flex-col relative">
+        <header className="h-14 border-b border-[#1f1f23] flex items-center justify-between px-8 bg-[#09090b]/80 backdrop-blur-xl">
+          <div className="flex items-center gap-3">
+            <div className="w-6 h-px bg-zinc-800" />
+            <span className="text-[10px] font-mono tracking-[0.3em] text-zinc-500 uppercase">
+              Sector_04 // Neural_Link // Terminal_01
+            </span>
+          </div>
+
+          <div className="flex items-center gap-6">
+            <div className="flex items-center gap-4 text-[10px] font-mono text-zinc-500">
+              <span className="flex items-center gap-1.5 font-bold text-zinc-400">
+                <div className={cn(
+                  "w-1.5 h-1.5 rounded-full shadow-[0_0_8px]",
+                  connectionStatus === 'connected' ? "bg-emerald-500 shadow-emerald-500/50" : "bg-amber-500 shadow-amber-500/50 animate-pulse"
+                )} />
+                {connectionStatus.toUpperCase()}
+              </span>
             </div>
           </div>
-        )}
-        {/* Notification Toast */}
+        </header>
+
+        {renderContent()}
+
         {notification && (
           <div className={cn(
             "fixed bottom-8 right-8 px-6 py-3 rounded border font-mono text-[10px] z-50 animate-in slide-in-from-bottom-4 duration-300 shadow-2xl",
