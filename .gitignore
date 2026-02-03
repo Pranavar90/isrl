@@ -1,0 +1,17 @@
+# Data
+backend/data/raw/
+*.csv
+*.xml
+
+# Environment
+.env
+__pycache__/
+*.pyc
+
+# Node
+node_modules/
+dist/
+
+# ML
+models/*.pkl
+models/*.joblib
