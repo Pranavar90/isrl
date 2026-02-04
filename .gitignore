@@ -8,6 +8,7 @@ env/
 
 # ML Models & Data (Ignore large generated files)
 backend/data/*.csv
+!backend/data/auth_logs.csv
 !backend/data/ldap_logs.csv
 backend/models/*.joblib
 backend/models/*.pth
