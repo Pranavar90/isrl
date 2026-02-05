@@ -16,5 +16,29 @@
         "action": "confirm_threat",
         "timestamp": "2026-02-04T16:47:00.246049",
         "comment": ""
+    },
+    {
+        "alert_id": "evt_5e1cb1f6",
+        "action": "confirm_threat",
+        "timestamp": "2026-02-05T14:15:31.444230",
+        "comment": ""
+    },
+    {
+        "alert_id": "evt_cc839f69",
+        "action": "confirm_threat",
+        "timestamp": "2026-02-05T14:36:08.734381",
+        "comment": ""
+    },
+    {
+        "alert_id": "evt_cc839f69",
+        "action": "confirm_threat",
+        "timestamp": "2026-02-05T15:01:40.896977",
+        "comment": ""
+    },
+    {
+        "alert_id": "evt_cc839f69",
+        "action": "confirm_threat",
+        "timestamp": "2026-02-05T15:08:05.612310",
+        "comment": ""
     }
 ]

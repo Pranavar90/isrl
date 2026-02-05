@@ -4,6 +4,7 @@ import DeepDiveView from './components/DeepDiveView';
 import DataNodes from './components/DataNodes';
 import IdentityMatrix from './components/IdentityMatrix';
 import NotificationsView from './components/NotificationsView';
+import GlobalTrend from './components/GlobalTrend';
 import {
   Shield,
   Activity,
@@ -27,16 +28,62 @@ function App() {
   const [currentView, setCurrentView] = useState('dashboard');
   const [selectedAlert, setSelectedAlert] = useState(null);
   const [notification, setNotification] = useState(null);
-  const [connectionStatus, setConnectionStatus] = useState('connecting');
+  const [connectionStatus, setConnectionStatus] = useState('disconnected');
+  const [liveEvents, setLiveEvents] = useState([]);
+  const [alertHistory, setAlertHistory] = useState([]);
   const [stats, setStats] = useState({
     totalEvents: 500000,
     highRisk: 1420,
     monitoredUsers: 5000
   });
 
+  useEffect(() => {
+    const host = window.location.hostname;
+    const ws = new WebSocket(`ws://${host}:8000/ws/stream`);
+
+    const fetchInitialData = async () => {
+      try {
+        const res = await axios.get(`http://${host}:8000/alerts/history`);
+        setAlertHistory(res.data);
+      } catch (err) {
+        console.error("Failed to fetch initial history", err);
+      }
+    };
+
+    ws.onopen = () => {
+      setConnectionStatus('connected');
+      fetchInitialData();
+    };
+
+    ws.onmessage = (e) => {
+      try {
+        const evt = JSON.parse(e.data);
+        setLiveEvents(prev => [evt, ...prev].slice(0, 50));
+        setAlertHistory(prev => [evt, ...prev].slice(0, 100));
+
+        // Dynamic notification for high risk if not in notifications view
+        if (evt.score > 80) {
+          setNotification({
+            type: 'escalate',
+            message: `CRITICAL: High risk detected for ${evt.user} (${evt.score.toFixed(1)}%)`
+          });
+          setTimeout(() => setNotification(null), 5000);
+        }
+      } catch (err) {
+        console.error("Failed to parse ws message", err);
+      }
+    };
+
+    ws.onerror = () => setConnectionStatus('error');
+    ws.onclose = () => setConnectionStatus('disconnected');
+
+    return () => ws.close();
+  }, []);
+
   const handleAction = async (alertId, action, comment = '') => {
     try {
-      await axios.post('http://localhost:8000/alerts/action', {
+      const host = window.location.hostname;
+      await axios.post(`http://${host}:8000/alerts/action`, {
         alert_id: alertId,
         action: action,
         comment: comment
@@ -81,7 +128,7 @@ function App() {
             {/* Left Feed - Data Dense */}
             <div className="w-[340px] border-r border-[#1f1f23] flex flex-col bg-[#0c0c0e]/30">
               <div className="p-4 border-b border-[#1f1f23] flex items-center justify-between">
-                <h2 className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Anomaly Pipeline</h2>
+                <h2 className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Operational Activity Feed</h2>
                 <div className="flex gap-1">
                   <div className="w-1 h-1 bg-zinc-800 rounded-full" />
                   <div className="w-1 h-1 bg-zinc-800 rounded-full" />
@@ -89,39 +136,50 @@ function App() {
                 </div>
               </div>
               <div className="flex-1 overflow-hidden">
-                <LiveStream onSelectAlert={setSelectedAlert} selectedId={selectedAlert?.id} />
+                <LiveStream
+                  events={liveEvents}
+                  onSelectAlert={setSelectedAlert}
+                  selectedId={selectedAlert?.id}
+                />
               </div>
             </div>
 
             {/* Right Analysis - Detailed */}
-            <div className="flex-1 flex flex-col bg-[#09090b]">
-              {selectedAlert ? (
-                <div className="flex-1 overflow-y-auto p-10 max-w-5xl mx-auto w-full">
-                  <div className="flex items-center gap-2 mb-8 text-[10px] text-zinc-600 font-mono">
-                    <span>SECTOR_ROOT</span>
-                    <ChevronRight className="w-3 h-3" />
-                    <span>ANOMALY_LOGS</span>
-                    <ChevronRight className="w-3 h-3" />
-                    <span className="text-zinc-400">{selectedAlert.id}</span>
+            <div className="flex-1 flex flex-col bg-[#09090b] overflow-hidden">
+              <div className="flex-1 overflow-y-auto scrollbar-hide px-8 pt-8 pb-12 w-full">
+                {selectedAlert ? (
+                  <>
+                    <div className="flex items-center gap-2 mb-8 text-[10px] text-zinc-600 font-mono">
+                      <span>SECTOR_ROOT</span>
+                      <ChevronRight className="w-3 h-3" />
+                      <span>DATA_STREAMS</span>
+                      <ChevronRight className="w-3 h-3" />
+                      <span className="text-zinc-400">{selectedAlert.user}</span>
+                    </div>
+                    <DeepDiveView alert={selectedAlert} onAction={handleAction} />
+                  </>
+                ) : (
+                  <div className="h-full flex flex-col items-center justify-center py-20">
+                    <div className="relative">
+                      <Shield className="w-24 h-24 text-zinc-900 absolute -inset-2 blur-2xl animate-pulse" />
+                      <Shield className="w-24 h-24 text-zinc-900 opacity-20 relative z-10" />
+                    </div>
+                    <p className="mt-8 text-[10px] font-mono tracking-widest text-zinc-700 uppercase">
+                      Operational Overwatch: Nominal
+                    </p>
+                    <div className="mt-4 flex gap-2">
+                      <div className="w-8 h-px bg-zinc-900" />
+                      <div className="w-2 h-px bg-zinc-900" />
+                      <div className="w-16 h-px bg-zinc-900" />
+                    </div>
                   </div>
-                  <DeepDiveView alert={selectedAlert} onAction={handleAction} />
+                )}
+
+                {/* Global Analytics - Constant pulse across all views */}
+                <div className="mt-12 -mx-8">
+                  <GlobalTrend />
                 </div>
-              ) : (
-                <div className="flex-1 flex flex-col items-center justify-center">
-                  <div className="relative">
-                    <Shield className="w-24 h-24 text-zinc-900 absolute -inset-2 blur-2xl animate-pulse" />
-                    <Shield className="w-24 h-24 text-zinc-900 opacity-20 relative z-10" />
-                  </div>
-                  <p className="mt-8 text-[10px] font-mono tracking-widest text-zinc-700 uppercase">
-                    Waiting for node selection
-                  </p>
-                  <div className="mt-4 flex gap-2">
-                    <div className="w-8 h-px bg-zinc-900" />
-                    <div className="w-2 h-px bg-zinc-900" />
-                    <div className="w-16 h-px bg-zinc-900" />
-                  </div>
-                </div>
-              )}
+              </div>
             </div>
           </main>
         );
@@ -130,7 +188,7 @@ function App() {
       case 'users':
         return <div className="flex-1 overflow-y-auto"><IdentityMatrix /></div>;
       case 'alerts':
-        return <div className="flex-1 overflow-y-auto"><NotificationsView onNavigateToAlert={handleNotificationClick} /></div>;
+        return <div className="flex-1 overflow-y-auto"><NotificationsView alerts={alertHistory} onNavigateToAlert={handleNotificationClick} /></div>;
       default:
         return null;
     }

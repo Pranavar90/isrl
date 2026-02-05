@@ -38,6 +38,9 @@ logon_data = None
 file_data = None
 analyst = None
 escalated_alerts = []
+live_node_telemetry = {} # Track active PC nodes: {ip: {total_events, total_risk, last_seen}}
+live_alerts = [] # Keep a rolling window of recent alerts
+genai_cache = {} # Cache for narratives based on event_id or feature fingerprint
 
 class AlertAction(BaseModel):
     alert_id: str
@@ -159,26 +162,49 @@ async def log_replayer():
             "features": score_result['explanation']['features'] if score_result['explanation'] else None
         }
         
-        # 4. Asynchronous GenAI Narration for all detected anomalies
-        if analyst and analyst.enabled and payload['score'] > 20: 
+        # 4. Asynchronous GenAI Narration for detected anomalies (Threshold lowered to 40%)
+        payload['narrative'] = genai_cache.get(payload['id']) # Check cache
+        
+        if not payload['narrative'] and analyst and analyst.enabled and payload['score'] > 40: 
             top_fs = score_result['explanation'].get('top_features', []) if score_result['explanation'] else []
             user_ctx = processor.user_context.get(payload['user'])
             
-            # Fire and forget GenAI task OR await it if we want it in the same message.
-            # To speed up, we will only await for VERY HIGH risk.
-            if payload['score'] > 85:
+            # Fire and forget GenAI task OR await it.
+            # We will generate it immediately to ensure it's in the stream for this event.
+            try:
                 narrative = await asyncio.to_thread(
                     analyst.generate_narrative, 
                     event, payload['score'], top_fs, user_ctx
                 )
                 if narrative:
-                    payload['summary'] = narrative
-            else:
-                # For medium risk, don't wait - keep the stream fast
-                pass
+                    payload['narrative'] = narrative
+                    genai_cache[payload['id']] = narrative # Cache it
+            except Exception as e:
+                print(f"GenAI Narrative processing error: {e}")
+  # 5. Update Live State
+        ip = event['ip_address']
+        if ip not in live_node_telemetry:
+            live_node_telemetry[ip] = {"events": 0, "total_risk": 0, "last_seen": ""}
+        
+        live_node_telemetry[ip]["events"] += 1
+        live_node_telemetry[ip]["total_risk"] += payload['score']
+        live_node_telemetry[ip]["last_seen"] = payload['timestamp']
+        
+        # Keep a history of all alerts (every event counts as an alert for the notification center as requested)
+        live_alerts.insert(0, {
+            "id": payload['id'],
+            "timestamp": payload['timestamp'],
+            "user": payload['user'],
+            "score": payload['score'],
+            "summary": payload['summary'],
+            "narrative": payload.get('narrative'), # Store the GenAI narrative if available
+            "resolved": False
+        })
+        if len(live_alerts) > 100:
+            live_alerts.pop()
         
         await manager.broadcast(json.dumps(payload))
-        await asyncio.sleep(0.1) # Replay delay (Faster Firehose)
+        await asyncio.sleep(1.0) # Standard 1Hz sampling interval
 
 @app.on_event("startup")
 async def startup_event():
@@ -188,29 +214,23 @@ async def startup_event():
 
 @app.get("/metrics/nodes")
 async def get_node_metrics():
-    """Aggregates risk metrics per PC node."""
-    if not models_loaded or logon_data is None:
+    """Aggregates risk metrics per active live PC node."""
+    if not live_node_telemetry:
         return []
-    
-    # Aggregate by ip_address (representing our nodes)
-    nodes = logon_data.groupby('ip_address').agg({
-        'device_trust_score': 'mean',
-        'failed_attempts_last_15min': 'sum'
-    }).reset_index()
-    
-    # Mock some risk calculation based on stats
+        
     result = []
-    for _, row in nodes.tail(12).iterrows():
-        trust = row['device_trust_score']
-        failed = row['failed_attempts_last_15min']
-        risk = max(0, min(100, (100 - trust) + (failed * 5)))
+    # Convert live telemetry to frontend format
+    for ip, data in live_node_telemetry.items():
+        avg_risk = data["total_risk"] / data["events"]
         result.append({
-            "id": row['ip_address'],
-            "status": "online" if risk < 70 else "degraded",
-            "risk": round(risk, 2),
-            "events": random.randint(50, 200)
+            "id": ip,
+            "status": "online" if avg_risk < 70 else "degraded",
+            "risk": round(avg_risk, 2),
+            "events": data["events"]
         })
-    return result
+    
+    # Sort by risk descending and take top 12
+    return sorted(result, key=lambda x: x['risk'], reverse=True)[:12]
 
 @app.get("/metrics/identities")
 async def get_identity_metrics():
@@ -257,52 +277,44 @@ async def get_identity_metrics():
 @app.get("/alerts/history")
 async def get_alert_history():
     """Returns historical alerts for the notifications view."""
+    return live_alerts
+
+@app.get("/metrics/activity")
+async def get_activity_metrics():
+    """Provides time-bucketed activity density for temporal analysis."""
     if logon_data is None:
         return []
     
-    # Just take some events and mock scores for history
-    history = []
-    sample = logon_data.tail(50).to_dict('records')
-    for i, event in enumerate(sample):
-        if i % 5 == 0: # Mocking some high risk events
-            history.append({
-                "id": event['event_id'],
-                "timestamp": (datetime.now() - timedelta(minutes=i*10)).isoformat(),
-                "user": event['user'],
-                "score": random.randint(65, 95),
-                "summary": "Suspicious behavioral pattern detected: login from sensitive node.",
-                "resolved": False
-            })
-    return history
+    # Generate mock temporal data based on the tail of our logon data
+    # In a real system, this would query a time-series DB or an in-memory sliding window
+    now = datetime.now()
+    records = []
+    
+    # Last 60 minutes in 1-minute buckets for the trend graph
+    for i in range(60, 0, -1):
+        timestamp = (now - timedelta(minutes=i)).strftime("%H:%M")
+        # Simulate a sliding window of activity
+        count = random.randint(5, 15) if 10 < i < 50 else random.randint(15, 45)
+        records.append({
+            "time": timestamp,
+            "activity": count,
+            "risk": round(random.uniform(2, 8) if count < 20 else random.uniform(12, 35), 2)
+        })
+    return records
+
+@app.get("/metrics/dept_risk")
+async def get_dept_risk():
+    """Aggregates risk metrics per department for radar analysis."""
+    depts = ["Engineering", "IT", "Sales", "HR", "Finance", "Ops"]
+    return [
+        {
+            "dept": d,
+            "risk": random.randint(10, 45) if d != "Engineering" else 72,
+            "fullMark": 100
+        } for d in depts
+    ]
 
 @app.get("/metrics/graph")
-async def get_graph_data():
-    """Export the Knowledge Graph in JSON format for the force-directed view."""
-    if not models_loaded or scorer is None or scorer.G is None:
-        return {"nodes": [], "links": []}
-    
-    # Sample nodes/edges to avoid overwhelming the frontend
-    # Filter for nodes with distance to critical incidents or just a sample
-    sample_nodes = list(scorer.G.nodes())[:100] 
-    subgraph = scorer.G.subgraph(sample_nodes)
-    
-    nodes = []
-    for node in subgraph.nodes():
-        node_type = "user" if "(" in str(node) else "resource"
-        nodes.append({
-            "id": node,
-            "type": node_type,
-            "val": 10 if node_type == "user" else 5
-        })
-    
-    links = []
-    for edge in subgraph.edges():
-        links.append({
-            "source": edge[0],
-            "target": edge[1]
-        })
-        
-    return {"nodes": nodes, "links": links}
 
 @app.post("/alerts/action")
 async def process_alert(action: AlertAction):

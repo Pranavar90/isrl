@@ -17,7 +17,8 @@ const IdentityMatrix = () => {
     useEffect(() => {
         const fetchIdentities = async () => {
             try {
-                const res = await axios.get('http://localhost:8000/metrics/identities');
+                const host = window.location.hostname;
+                const res = await axios.get(`http://${host}:8000/metrics/identities`);
                 setData(res.data);
 
                 // Auto-expand first department and location

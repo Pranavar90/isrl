@@ -4,26 +4,60 @@ import json
 class GenAIAnalyst:
     """Wrapper for Ollama to generate natural language security analysis."""
     
-    def __init__(self, model="phi3:mini", base_url="http://localhost:11434"):
+    def __init__(self, model="gemma3:1b", base_url="http://localhost:11434"):
         self.model = model
-        self.base_url = f"{base_url}/api/generate"
+        self.base_url = f"{base_url}/api"
         self.enabled = self._check_connection()
 
     def _check_connection(self):
-        """Check if Ollama is running and the model is available."""
+        """Check if Ollama is running and the model is available. Pulls model if missing."""
+        import subprocess
+        import time
+
+        def try_connect(target_url):
+            try:
+                # Test connection to the tags endpoint
+                response = requests.get(f"{target_url}/tags", timeout=2)
+                return response.status_code == 200
+            except:
+                return False
+
+        # 1. Check if Ollama is already running (Manual start or previous background)
+        if not try_connect(self.base_url):
+            print(f"GenAI Analyst: [localhost] not responding. Attempting background service initialization...")
+            try:
+                # Start 'ollama serve' as a detached background process
+                subprocess.Popen(["ollama", "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0)
+                
+                # Wait for boot-up with a polling loop
+                for _ in range(5):
+                    time.sleep(2)
+                    if try_connect(self.base_url):
+                        break
+            except Exception as e:
+                print(f"GenAI Analyst: System-level serve failed. ({e})")
+
+        # 2. Final connection verify and model check
         try:
-            # Short timeout to not block startup
-            response = requests.get(f"{self.base_url.replace('/generate', '/tags')}", timeout=2)
-            if response.status_code == 200:
+            if try_connect(self.base_url):
+                response = requests.get(f"{self.base_url}/tags", timeout=2)
                 models = [m['name'] for m in response.json().get('models', [])]
+                
                 if any(self.model in m for m in models):
-                    print(f"GenAI Analyst: Connected to Ollama. Model '{self.model}' ready.")
+                    print(f"GenAI Analyst: Model '{self.model}' verified and ready for inference.")
                     return True
                 else:
-                    print(f"GenAI Analyst: Connected to Ollama, but model '{self.model}' not found. Run 'ollama pull {self.model}'.")
+                    print(f"GenAI Analyst: Model '{self.model}' not detected locally. Initiating Auto-Pull (815MB)...")
+                    # Increased timeout for pulling over slower networks
+                    pull_resp = requests.post(f"{self.base_url}/pull", json={"name": self.model, "stream": False}, timeout=600)
+                    if pull_resp.status_code == 200:
+                       print(f"GenAI Analyst: '{self.model}' pull sequence complete.")
+                       return True
+            else:
+                print("GenAI Analyst: All connection attempts to [localhost:11434] exhausted. Narratives disabled.")
             return False
-        except Exception:
-            print("GenAI Analyst: Ollama not detected at localhost:11434. Local LLM narratives disabled.")
+        except Exception as e:
+            print(f"GenAI Analyst: Initialization fault: {e}")
             return False
 
     def generate_narrative(self, event, score, top_features, user_context=None):
@@ -43,13 +77,12 @@ class GenAIAnalyst:
         - Source Node: {event.get('ip_address', event.get('pc', 'Unknown'))}
         
         SITUATIONAL CONTEXT:
-        Sometimes our behavioral model flags events as "Anomalous" (High Risk Score) even if they look "Normal" on the surface. This happens when the mathematical signature of the behavior deviates from the user's historical baseline (e.g., login at 3 AM is technically not a policy violation, but it's mathematically rare for this specific user).
+        Sometimes our behavioral model flags events as "Anomalous" (High Risk Score) even if they look "Normal" on the surface. This happens when the mathematical signature of the behavior deviates from the user's historical baseline.
         
         INSTRUCTIONS:
         1. Write a 2-sentence professional analysis.
         2. EXPLAIN WHY the SHAP features ({', '.join(top_features)}) caused the score to increase.
-        3. If the score is between 40-70%, explain it as a "behavioral shift" or "novel detection" rather than a definite threat.
-        4. Maintain a formal, enterprise-grade tone. Do not use placeholders.
+        3. Maintain a formal, enterprise-grade tone. Do not use placeholders.
         """
 
         try:
@@ -62,7 +95,8 @@ class GenAIAnalyst:
                     "num_predict": 100
                 }
             }
-            response = requests.post(self.base_url, json=payload, timeout=10)
+            # Use /generate endpoint explicitly
+            response = requests.post(f"{self.base_url}/generate", json=payload, timeout=10)
             if response.status_code == 200:
                 return response.json().get('response', '').strip()
         except Exception as e:

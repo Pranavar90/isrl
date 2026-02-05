@@ -15,7 +15,8 @@ const DataNodes = () => {
     useEffect(() => {
         const fetchNodes = async () => {
             try {
-                const res = await axios.get('http://localhost:8000/metrics/nodes');
+                const host = window.location.hostname;
+                const res = await axios.get(`http://${host}:8000/metrics/nodes`);
                 setNodes(res.data);
             } catch (err) {
                 console.error("Failed to fetch node metrics", err);

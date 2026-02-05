@@ -1,35 +1,102 @@
-# Sentinel UEBA: Multi-Model Insider Threat Detection PoC
+# 🛡️ Sentinel UEBA: Advanced Multi-Model Insider Threat Detection
 
-Sentinel is a high-fidelity **User and Entity Behavior Analytics (UEBA)** platform designed to detect subtle insider threats within enterprise environments. It combines deep learning, statistical ensembles, and GenAI to turn raw telemetry into actionable narratives.
-
-## 🧠 Architecture Overview
-
-Sentinel uses a **Multi-Model Ensemble** to minimize false positives and maximize detection sensitivity:
-
-1.  **Global Detection (Isolation Forest)**: A forest of 400 parallelized trees (CPU/GPU) that identifies statistical outliers across the entire organization.
-2.  **Behavioral Baselining (Deep Autoencoder)**: A PyTorch-based neural engine that learns "normal" latent spaces for each user, flagging deviations from individual historical patterns.
-3.  **Heuristic Rules**: A layer of deterministic security checks (e.g., Impossible Travel, Malicious IPs).
-4.  **GenAI Narration (Phi-3:mini)**: A local LLM that synthesizes SHAP feature importance and neural gradients into professional security analyst briefings.
+Sentinel is a high-fidelity **User and Entity Behavior Analytics (UEBA)** platform designed to detect subtle, sophisticated insider threats within enterprise environments. By combining deep learning, statistical ensembles, and GenAI, Sentinel transforms raw telemetry into actionable, high-context intelligence.
 
 ---
 
-## 📊 Dataset Generation
+## 🏗️ High-Level Architecture
 
-The system operates on a synthetic dataset of **500,000 authentication events** mapped to **5,000 unique identities**.
+Sentinel employs a modular architecture designed for horizontal scalability and high-throughput real-time analysis.
 
-### Generation Logic
-The dataset was programmatically generated using a custom "Synthetic Identity" engine. Each user is assigned a "Normal" profile (Department, Working Hours, Trusted Device, Primary Location).
+```mermaid
+graph TD
+    subgraph "Data Ingestion Layer"
+        AL[Auth Logs] --> DP[Data Processor]
+        LL[LDAP Logs] --> DP
+        DP --> FE[Feature Engineering Engine]
+    end
 
-**The Anomaly Injection Logic follows this prompt-style specification:**
-> "Generate a 500k event audit log where 90% of traffic is 'Pure Normal' (matching user-profile work hours and locations). Inject 10% anomalies based on three tiers:
-> 1. **Tier 1 (Rules)**: High-impact indicators like 'Impossible Travel' (location jumps > 1000km/hr) and known Malicious IPs.
-> 2. **Tier 2 (Global Outliers)**: Rare but non-malicious events like a standard user logging into a Server node.
-> 3. **Tier 3 (Subtle Behavioral Shifts)**: Users logging in at 'Odd Hours' (12-hour shifts from their normal baseline) or from new devices with low trust scores."
+    subgraph "Detection Engine (Hybrid Ensemble)"
+        FE --> IF[Isolation Forest: Global Outliers]
+        FE --> AE[Autoencoder: Behavioral Latent Space]
+        FE --> HR[Heuristic Rules: Deterministic Checks]
+    end
 
-### Key Files:
-- `backend/scripts/generate_auth_data.py`: The identity and telemetry generator.
-- `backend/data/ldap_logs.csv`: The simulated 5,000-user directory.
-- `backend/data/auth_logs.csv`: The raw 500k event telemetry.
+    subgraph "Intelligence Synthesis"
+        IF --> SN[Score Normalizer]
+        AE --> SN
+        HR --> SN
+        SN --> GA[GenAI Analyst: Phi-3 Narration]
+    end
+
+    subgraph "Operational Interface"
+        GA --> API[FastAPI Backend]
+        API --> WS[WebSocket Live Stream]
+        WS --> UI[React Dashboard]
+    end
+```
+
+---
+
+## 🔄 Process Flow & Sequence
+
+The lifecycle of an event from raw telemetry to analyst notification follows a strict pipeline of scoring and narration.
+
+```mermaid
+sequenceDiagram
+    participant T as Telemetry System
+    participant B as Backend (FastAPI)
+    participant M as ML Ensemble (IF + AE)
+    participant L as GenAI (Local Phi-3)
+    participant F as Frontend (React)
+
+    T->>B: Raw Auth Event (JSON)
+    B->>B: Feature Engineering (SHAP Vectors)
+    B->>M: Compute Anomaly Score
+    M-->>B: Global & Behavioral Risk Indices
+    
+    alt Risk > 40%
+        B->>L: Generate Behavioral Narration
+        L-->>B: Natural Language Interpretation
+    else Risk <= 40%
+        B->>B: Low-Priority Flagging
+    end
+
+    B->>F: Broadcast Event via WebSocket
+    Note over F: Real-time UI Update (Live Guard)
+    
+    F->>F: Data Triage (Risk-Based Sorting)
+    F->>F: Notification Dispatch (High Intensity)
+```
+
+---
+
+## 🔬 Core Methodology
+
+### 1. Hybrid Intelligence Model
+- **Isolation Forest (Global)**: Analyzes the entire dataset to find "rare" events that stand out statistically across the whole company.
+- **Deep Autoencoder (Behavioral)**: Learns the "normal" manifold of an individual user. If a user's behavior changes relative to their own past (even if it's statistically "normal" for the company), the latent space reconstruction error spikes.
+- **Heuristic Rules**: Deterministic safety checks like *Impossible Travel* and *Known-Malicious Geo-Vectors*.
+
+### 2. GenAI "Interpretive" Layer
+While traditional ML gives you a score, Sentinel's **GenAI Analyst** (running local Phi-3) explains *why* the score is high. It examines the SHAP attribution coefficients and translates mathematical anomalies into human-readable narratives.
+
+### 3. Real-time Triage (Notification Center)
+The dashboard features a **Risk-Partitioned Queue**:
+- **Nominal Feed**: Low-risk telemetry for operational awareness.
+- **Anomalous Feed**: High-risk, escalated threats requiring immediate human intervention.
+
+---
+
+## 🛠️ Tech Stack
+
+| Component | Technology |
+| :--- | :--- |
+| **Frontend** | React, TailwindCSS, Recharts, Lucide-React |
+| **Backend** | FastAPI, Uvicorn, Websockets |
+| **AI/ML** | PyTorch, Scikit-Learn, SHAP, Pandas |
+| **LLM** | Ollama (Gemma3:1B) |
+| **Styling** | Vanilla CSS, Glassmorphism, Neon/Red Accents |
 
 ---
 
@@ -38,30 +105,49 @@ The dataset was programmatically generated using a custom "Synthetic Identity" e
 ### Prerequisites:
 - Python 3.10+
 - Node.js & NPM
-- **Ollama** (running `phi3:mini`)
-- NVIDIA GPU with CUDA (Optional, for acceleration)
+- **Ollama** (Required for interpretive AI narratives)
+- **Gemma3:1B** (Local LLM, 815MB footprint)
 
 ### Installation:
-1. **Initialize Backend**:
+
+1. **Ollama Setup**:
+   Download and install Ollama from [ollama.com](https://ollama.com/). The Sentinel backend is designed to be self-healing and will attempt to start the Ollama service on `localhost:11434` and pull the required `gemma3:1b` model automatically on its first run.
+   
+   However, for the best experience, we recommend a manual pull first:
+   ```bash
+   ollama pull gemma3:1b
+   ```
+
+2. **Initialize Backend**:
    ```bash
    cd backend
-   pip install -r requirements.txt # ensure pandas, torch, shap, sklearn, fastapi are installed
+   pip install -r requirements.txt
    ```
-2. **Train the Models**:
+
+3. **Initialize Frontend**:
    ```bash
-   python ml_engine/train.py --n_estimators 400
+   cd ../frontend
+   npm install
    ```
-3. **Start Services**:
-   - Backend: `uvicorn api.main:app --host 0.0.0.0 --port 8000`
-   - Frontend: `cd frontend && npm run dev`
+
+## 🚀 Running the Engines
+
+1. **Launch Backend**:
+   From `backend/api`:
+   ```bash
+   uvicorn main:app --reload
+   ```
+   *Note: On first boot, the backend may pause for a few seconds to verify the local LLM connection.*
+
+2. **Launch Frontend**:
+   From `frontend`:
+   ```bash
+   npm run dev
+   ```
 
 ---
 
-## 🌲 Decision Transparency
-Every training run exports a structural visualization of the Isolation Forest logic to `backend/models/tree_vis.png`, allowing analysts to inspect the "decision paths" of the global detection layer.
-
-## 🛠️ Tech Stack
-- **Frontend**: React, TailwindCSS, Recharts, Lucide
-- **Backend**: FastAPI, PyTorch, Scikit-Learn
-- **Explainability**: SHAP (Global), Gradient Attribution (Behavioral)
-- **GenAI**: Local Phi-3 via Ollama
+## 🧭 Future Roadmap
+- [ ] **Graph Neural Networks (GNN)**: For lateral movement detection across identity clusters.
+- [ ] **Active Learning**: Automated model fine-tuning based on analyst feedback (Escalate/Resolve).
+- [ ] **Multi-Agent Simulation**: Simulating red-team attacks to battle-test detection thresholds.

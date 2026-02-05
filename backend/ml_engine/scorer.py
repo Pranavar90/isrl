@@ -268,7 +268,7 @@ class HybridScorer:
                       (graph_score * self.graph_weight)
         
         explanation = None
-        if final_score > 25: # Lowered threshold for context
+        if final_score > 15: # Lowered threshold to ensure single-factor anomalies (like failed attempts) trigger summaries
             explanation = self.generate_xai_summary(feature_vector, rule_score, final_score, event, if_score, ae_score, graph_score)
              
         return {

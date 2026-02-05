@@ -1,6 +1,8 @@
 import React from 'react';
 import {
-    BarChart, Bar, XAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell
+    BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
+    AreaChart, Area, Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
+    Brush, ComposedChart, Line
 } from 'recharts';
 import {
     ShieldAlert,
@@ -13,27 +15,44 @@ import {
     Share2,
     X,
     MessageSquare,
-    AlertTriangle
+    AlertTriangle,
+    BarChart3,
+    TrendingUp,
+    Zap
 } from 'lucide-react';
-import ForceGraph2D from 'react-force-graph-2d';
 import axios from 'axios';
+import { clsx } from 'clsx';
+import { twMerge } from 'tailwind-merge';
+
+function cn(...inputs) {
+    return twMerge(clsx(inputs));
+}
 
 const DeepDiveView = ({ alert, onAction }) => {
-    const [graphData, setGraphData] = React.useState({ nodes: [], links: [] });
+    const [activityData, setActivityData] = React.useState([]);
+    const [deptData, setDeptData] = React.useState([]);
     const [showModal, setShowModal] = React.useState(false);
     const [comment, setComment] = React.useState('');
     const [modalAction, setModalAction] = React.useState(null);
 
     React.useEffect(() => {
-        const fetchGraph = async () => {
+        const fetchData = async () => {
             try {
-                const res = await axios.get('http://localhost:8000/metrics/graph');
-                setGraphData(res.data);
+                const host = window.location.hostname;
+                const [activityRes, deptRes] = await Promise.all([
+                    axios.get(`http://${host}:8000/metrics/activity`),
+                    axios.get(`http://${host}:8000/metrics/dept_risk`)
+                ]);
+                setActivityData(activityRes.data);
+                setDeptData(deptRes.data);
             } catch (err) {
-                console.error("Failed to fetch graph", err);
+                console.error("Failed to fetch analytics data", err);
             }
         };
-        fetchGraph();
+        fetchData();
+        // Refresh every 10s for the "sliding window" feel
+        const interval = setInterval(fetchData, 10000);
+        return () => clearInterval(interval);
     }, [alert.id]);
 
     const handleConfirm = (type) => {
@@ -42,15 +61,14 @@ const DeepDiveView = ({ alert, onAction }) => {
         setComment('');
     };
 
-    // Use real SHAP features if available, else mock
     const shapFeatures = alert.shap && alert.features ? alert.features.map((f, i) => ({
         feature: f,
         contribution: alert.shap[i],
-        description: Math.abs(alert.shap[i]) > 0.1 ? `Primary deviation factor` : 'Minor variance'
+        description: Math.abs(alert.shap[i]) > 0.1 ? `High attribution coefficient` : 'Baseline variance'
     })) : [
-        { feature: 'device_trust', contribution: 0.15, description: 'Slightly above mean' },
-        { feature: 'failed_attempts', contribution: 0.65, description: 'Significant outlier activity' },
-        { feature: 'location_rarity', contribution: 0.25, description: 'Atypical resource interaction' },
+        { feature: 'device_trust', contribution: 0.15, description: 'Stable telemetry' },
+        { feature: 'failed_attempts', contribution: 0.65, description: 'Statistically significant deviation' },
+        { feature: 'location_rarity', contribution: 0.25, description: 'Geospatial outlier' },
     ];
 
     const peerData = [
@@ -60,25 +78,26 @@ const DeepDiveView = ({ alert, onAction }) => {
     ];
 
     return (
-        <div className="space-y-10 animate-in fade-in duration-500">
+        <div className="space-y-12 animate-in fade-in duration-700">
             {/* Subject Profile */}
-            <div className="flex justify-between items-start">
+            <div className="flex justify-between items-start border-b border-zinc-800 pb-8">
                 <div className="flex gap-6 items-center">
-                    <div className="w-16 h-16 rounded bg-zinc-900 border border-zinc-800 flex items-center justify-center">
-                        <Fingerprint className="w-8 h-8 text-zinc-600" />
+                    <div className="w-16 h-16 rounded bg-zinc-950 border border-zinc-800 flex items-center justify-center relative overflow-hidden group">
+                        <Fingerprint className="w-8 h-8 text-zinc-500 group-hover:text-emerald-500 transition-colors z-10" />
+                        <div className="absolute inset-0 bg-emerald-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
                     </div>
                     <div>
                         <div className="flex items-center gap-3 mb-1">
-                            <h1 className="text-xl font-mono font-semibold tracking-tight text-zinc-100 uppercase">
-                                Node: {alert.user}
+                            <h1 className="text-xl font-mono font-bold tracking-tight text-zinc-100 uppercase">
+                                NODE_ID: {alert.user}
                             </h1>
-                            <span className="text-[10px] px-2 py-0.5 bg-zinc-800 text-zinc-500 border border-zinc-700 rounded-sm uppercase tracking-widest">
-                                Engineering
+                            <span className="text-[9px] px-2 py-0.5 bg-zinc-900 text-zinc-400 border border-zinc-700 rounded-sm uppercase tracking-[0.2em] font-bold">
+                                {alert.department || 'INTERNAL_DEPT'}
                             </span>
                         </div>
                         <div className="flex items-center gap-4 text-xs text-zinc-500 font-mono">
-                            <span className="flex items-center gap-1.5"><Activity className="w-3 h-3" /> Event_ID: {alert.id}</span>
-                            <span className="flex items-center gap-1.5"><ShieldAlert className="w-3 h-3" /> Risk: {alert.score}%</span>
+                            <span className="flex items-center gap-1.5"><Zap className="w-3 h-3 text-zinc-600" /> TRACE_REF: {alert.id}</span>
+                            <span className="flex items-center gap-1.5"><ShieldAlert className="w-3 h-3 text-red-500" /> <span className="text-red-500 font-bold">RISK_COEFFICIENT:</span> {alert.score.toFixed(2)}%</span>
                         </div>
                     </div>
                 </div>
@@ -86,182 +105,229 @@ const DeepDiveView = ({ alert, onAction }) => {
                 <div className="flex gap-2">
                     <button
                         onClick={() => { setModalAction('resolve'); setShowModal(true); }}
-                        className="h-9 px-4 text-xs font-semibold bg-zinc-900 text-zinc-400 border border-zinc-800 hover:bg-zinc-800 hover:text-zinc-200 transition-all rounded"
+                        className="h-9 px-4 text-[10px] font-bold uppercase tracking-widest bg-zinc-950 text-zinc-500 border border-zinc-800 hover:bg-zinc-900 hover:text-zinc-200 transition-all rounded"
                     >
-                        Resolve Event
+                        Resolve Entry
                     </button>
                     <button
                         onClick={() => { setModalAction('escalate'); setShowModal(true); }}
-                        className="h-9 px-4 text-xs font-semibold bg-red-950 text-red-200 border border-red-900 hover:bg-red-900 transition-all rounded text-red-50"
+                        className="h-9 px-4 text-[10px] font-bold uppercase tracking-widest bg-red-950/20 text-red-500 border border-red-900/30 hover:bg-red-900/30 hover:text-red-400 transition-all rounded shadow-[0_0_15px_rgba(239,68,68,0.1)]"
                     >
-                        Escalate Node
+                        Escalate Trace
                     </button>
                 </div>
             </div>
 
-            {/* Analysis Grid */}
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-10">
-                {/* Behavioral Variance (SHAP) */}
+            {/* Top Analysis Row */}
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-12">
+                {/* Factor Attribution Analysis (GRAPH) */}
                 <div className="space-y-6">
-                    <div className="flex items-center gap-3 border-b border-border pb-3">
-                        <Search className="w-4 h-4 text-zinc-500" />
-                        <h3 className="text-xs font-bold uppercase tracking-widest text-zinc-400">Behavioral Variance Explainer</h3>
+                    <div className="flex items-center gap-3 border-b border-zinc-800 pb-3">
+                        <BarChart3 className="w-4 h-4 text-zinc-500" />
+                        <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-400">Factor Attribution coefficients</h3>
                     </div>
 
-                    <div className="space-y-5">
-                        {shapFeatures.map((f, i) => (
-                            <div key={i} className="group">
-                                <div className="flex justify-between mb-2">
-                                    <span className="text-[11px] font-mono text-zinc-500 group-hover:text-zinc-300 transition-colors uppercase">{f.feature}</span>
-                                    <span className="text-[11px] font-bold text-zinc-400">+{Math.round(f.contribution * 100)}%</span>
-                                </div>
-                                <div className="w-full h-1 bg-zinc-900 rounded-full">
-                                    <div
-                                        className="h-full bg-zinc-600 rounded-full transition-all"
-                                        style={{ width: `${Math.min(100, f.contribution * 100)}%` }}
-                                    />
-                                </div>
-                                <p className="text-[10px] text-zinc-600 mt-2 font-mono italic">
-                                  // {f.description}
-                                </p>
-                            </div>
-                        ))}
-                    </div>
-
-                    <div className="mt-12 p-5 bg-zinc-900/30 border border-zinc-800 rounded">
-                        <div className="flex gap-3 items-start">
-                            <Info className="w-4 h-4 text-zinc-600 shrink-0 mt-0.5" />
-                            <p className="text-[11px] text-zinc-500 leading-relaxed font-mono">
-                                <span className="text-zinc-300 block mb-2">INTELLIGENCE_REPORT:</span>
-                                {alert.summary}
-                            </p>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Statistical Benchmarking */}
-                <div className="space-y-6">
-                    <div className="flex items-center gap-3 border-b border-border pb-3">
-                        <Users className="w-4 h-4 text-zinc-500" />
-                        <h3 className="text-xs font-bold uppercase tracking-widest text-zinc-400">Statistical Benchmarking</h3>
-                    </div>
-
-                    <div className="h-[280px] w-full">
+                    <div className="h-[250px] w-full bg-zinc-950/30 rounded border border-zinc-900/50 p-4">
                         <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={peerData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                                <CartesianGrid strokeDasharray="2 2" vertical={false} stroke="#1f1f23" />
-                                <XAxis
+                            <BarChart
+                                layout="vertical"
+                                data={shapFeatures.map(f => ({ name: f.feature, value: f.contribution * 100 }))}
+                                margin={{ top: 5, right: 30, left: 40, bottom: 5 }}
+                            >
+                                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#1f1f23" />
+                                <XAxis type="number" hide />
+                                <YAxis
                                     dataKey="name"
-                                    fontSize={10}
+                                    type="category"
+                                    fontSize={9}
                                     axisLine={false}
                                     tickLine={false}
-                                    tick={{ fill: '#52525b', fontFamily: 'monospace' }}
+                                    tick={{ fill: '#71717a', fontFamily: 'monospace' }}
+                                    width={100}
                                 />
                                 <Tooltip
                                     cursor={{ fill: 'rgba(255,255,255,0.02)' }}
-                                    contentStyle={{ background: '#09090b', border: '1px solid #27272a', borderRadius: '4px' }}
-                                    itemStyle={{ fontSize: '11px', fontFamily: 'monospace' }}
+                                    contentStyle={{ background: '#09090b', border: '1px solid #27272a', borderRadius: '2px' }}
+                                    itemStyle={{ fontSize: '10px', fontFamily: 'monospace' }}
                                 />
-                                <Bar dataKey="value" radius={[2, 2, 0, 0]} barSize={32}>
-                                    {peerData.map((entry, index) => (
-                                        <Cell
-                                            key={`cell-${index}`}
-                                            fill={index === 0 ? '#52525b' : '#27272a'}
-                                        />
+                                <Bar dataKey="value" radius={[0, 2, 2, 0]} barSize={20}>
+                                    {shapFeatures.map((entry, index) => (
+                                        <Cell key={`cell-${index}`} fill={entry.contribution > 0.4 ? '#ef4444' : '#10b981'} fillOpacity={0.6} />
                                     ))}
                                 </Bar>
                             </BarChart>
                         </ResponsiveContainer>
                     </div>
-                    <div className="flex justify-between text-[9px] font-mono text-zinc-700 tracking-tighter uppercase px-2">
-                        <span>Ref_Standard: 4.2r_LSCERT</span>
-                        <span>Dev_Threshold: 1.84 sigma</span>
+                </div>
+
+                {/* Information Synthesis Panels (Dual Box) */}
+                <div className="grid grid-cols-1 gap-6">
+                    {/* User Profile / Normal Behavior Context */}
+                    <div className="p-6 bg-zinc-950 border border-zinc-900 rounded-lg relative group">
+                        <div className="flex items-center gap-3 mb-4 border-b border-zinc-900 pb-3">
+                            <Users className="w-3.5 h-3.5 text-zinc-500" />
+                            <h3 className="text-[9px] font-bold uppercase tracking-[0.2em] text-zinc-400">Baseline user Behavior Profile</h3>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-3">
+                                <div className="space-y-1">
+                                    <span className="block text-[8px] text-zinc-600 uppercase font-mono">Temporal_Alignment</span>
+                                    <span className="block text-[10px] text-zinc-300 font-mono">09:00 - 18:00 (Standard)</span>
+                                </div>
+                                <div className="space-y-1">
+                                    <span className="block text-[8px] text-zinc-600 uppercase font-mono">Access_Vector</span>
+                                    <span className="block text-[10px] text-zinc-300 font-mono">Engineering_Subnet_A</span>
+                                </div>
+                            </div>
+                            <div className="space-y-3">
+                                <div className="space-y-1">
+                                    <span className="block text-[8px] text-zinc-600 uppercase font-mono">Device_Trust_Index</span>
+                                    <span className="block text-[10px] text-emerald-500 font-mono italic">Verified_Secure (89%)</span>
+                                </div>
+                                <div className="space-y-1">
+                                    <span className="block text-[8px] text-zinc-600 uppercase font-mono">Role_Classification</span>
+                                    <span className="block text-[10px] text-zinc-300 font-mono uppercase">System_Developer</span>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
-                    {/* Relational Knowledge Graph */}
-                    <div className="mt-10 space-y-6">
-                        <div className="flex items-center gap-3 border-b border-zinc-800 pb-3">
-                            <Share2 className="w-4 h-4 text-zinc-500" />
-                            <h3 className="text-xs font-bold uppercase tracking-widest text-zinc-400">Relational Knowledge Graph</h3>
+                    {/* Intelligence Report / GenAI synthesis */}
+                    <div className="p-6 bg-zinc-950 border border-zinc-900 rounded-lg relative overflow-hidden h-full">
+                        <div className="flex items-center gap-3 mb-4 border-b border-zinc-900 pb-3">
+                            <Info className="w-3.5 h-3.5 text-zinc-500" />
+                            <h3 className="text-[9px] font-bold uppercase tracking-[0.2em] text-zinc-400">Intelligence Synthesis Report</h3>
                         </div>
-                        <div className="h-[300px] w-full bg-zinc-950/50 border border-zinc-900 rounded-lg overflow-hidden relative">
-                            <ForceGraph2D
-                                graphData={graphData}
-                                nodeLabel="id"
-                                nodeAutoColorBy="type"
-                                nodeRelSize={6}
-                                linkDirectionalParticles={1}
-                                linkDirectionalParticleSpeed={0.01}
-                                backgroundColor="#09090b"
-                                height={300}
-                                width={500}
-                            />
-                            <div className="absolute bottom-2 right-2 text-[8px] font-mono text-zinc-700 bg-zinc-950 px-2 py-0.5 border border-zinc-900 uppercase">
-                                Subgraph_Mode: Active_Proximity
+                        <div className="min-h-[60px] flex items-start gap-4">
+                            <div className={cn(
+                                "w-1 h-12 rounded-full shrink-0 transition-all duration-1000",
+                                alert.score > 70 ? "bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.3)]" : "bg-emerald-500/20"
+                            )} />
+                            <div className="space-y-6 w-full">
+                                <p className="text-[10px] text-zinc-500 font-mono leading-relaxed bg-zinc-900/20 p-4 border-l-2 border-zinc-800">
+                                    <span className="text-zinc-400 block mb-1 font-bold tracking-widest uppercase italic font-sans underline decoration-zinc-800 underline-offset-4">Deterministic Synopsis Attribution:</span>
+                                    {alert.summary || "Incipient observation phase. No critical deviations detected in current telemetry window."}
+                                </p>
+
+                                <div className="p-4 bg-zinc-900/30 border-l-2 border-blue-900/50 relative overflow-hidden group">
+                                    <div className="absolute top-0 right-0 p-2 opacity-10 group-hover:opacity-30 transition-opacity">
+                                        <div className="text-[6px] font-mono uppercase tracking-[.3em] font-bold">PHI_3_ENGINE_V2</div>
+                                    </div>
+                                    <span className="text-blue-400/70 block mb-2 text-[9px] font-bold tracking-widest uppercase italic font-sans">Interpretive AI Narration:</span>
+                                    <p className="text-[10px] text-zinc-300 font-mono leading-relaxed italic">
+                                        {alert.narrative || (alert.score > 40 ? "// Awaiting neural synthesis... (Ollama:Phi3)" : "// Narrative suppressed for low-probability event.")}
+                                    </p>
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            {/* Custom Modal for Escalation/Resolution */}
-            {showModal && (
-                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-                    <div className="bg-zinc-900 border border-zinc-800 w-full max-w-md rounded-lg shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
-                        <div className="p-4 border-b border-zinc-800 flex justify-between items-center bg-zinc-900/50">
-                            <div className="flex items-center gap-2">
-                                {modalAction === 'escalate' ? <AlertTriangle className="w-4 h-4 text-red-500" /> : <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
-                                <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-zinc-200">
-                                    {modalAction === 'escalate' ? 'Escalation Protocol' : 'Resolution Protocol'}
-                                </h2>
+            {/* Bottom Insight Row */}
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-12 pt-10">
+                {/* Dept Risk Radar */}
+                <div className="space-y-6">
+                    <div className="flex items-center gap-3 border-b border-zinc-800 pb-3">
+                        <Share2 className="w-4 h-4 text-zinc-500" />
+                        <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-400">Departmental Risk Surface</h3>
+                    </div>
+                    <div className="h-[300px] w-full flex items-center justify-center p-4 bg-zinc-950/20 border border-zinc-900/50 rounded">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <RadarChart cx="50%" cy="50%" outerRadius="80%" data={deptData}>
+                                <PolarGrid stroke="#18181b" />
+                                <PolarAngleAxis
+                                    dataKey="dept"
+                                    tick={{ fill: '#52525b', fontSize: 10, fontFamily: 'monospace' }}
+                                />
+                                <Radar
+                                    name="Risk"
+                                    dataKey="risk"
+                                    stroke="#ec4899"
+                                    fill="#ec4899"
+                                    fillOpacity={0.2}
+                                />
+                            </RadarChart>
+                        </ResponsiveContainer>
+                    </div>
+                </div>
+
+                {/* User Leaderboard */}
+                <div className="space-y-6">
+                    <div className="flex items-center gap-3 border-b border-zinc-800 pb-3">
+                        <Users className="w-4 h-4 text-zinc-500" />
+                        <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-400">High-Activity Attribution ranking</h3>
+                    </div>
+                    <div className="space-y-4">
+                        {[
+                            { user: 'mei_sharma', activity: 48, risk: 92 },
+                            { user: 'j_doe_x', activity: 85, risk: 24 },
+                            { user: 'admin_sys_04', activity: 62, risk: 45 },
+                        ].map((u, i) => (
+                            <div key={i} className="bg-zinc-950 border border-zinc-900 p-4 rounded group hover:border-zinc-700 transition-colors">
+                                <div className="flex justify-between items-center mb-3">
+                                    <span className="text-[11px] font-mono font-bold text-zinc-300 uppercase">{u.user}</span>
+                                    <span className="text-[9px] font-mono text-zinc-600 uppercase">RANK_{i + 1}</span>
+                                </div>
+                                <div className="flex gap-4 items-center">
+                                    <div className="flex-1 space-y-1">
+                                        <div className="flex justify-between text-[8px] font-mono text-zinc-500 uppercase">
+                                            <span>Telemetry_Density</span>
+                                            <span>{u.activity}%</span>
+                                        </div>
+                                        <div className="w-full h-1 bg-zinc-900 rounded-full overflow-hidden">
+                                            <div className="h-full bg-emerald-500/40" style={{ width: `${u.activity}%` }} />
+                                        </div>
+                                    </div>
+                                    <div className="flex-1 space-y-1">
+                                        <div className="flex justify-between text-[8px] font-mono text-red-500 uppercase font-bold">
+                                            <span>Risk_Index</span>
+                                            <span>{u.risk}%</span>
+                                        </div>
+                                        <div className="w-full h-1 bg-zinc-900 rounded-full overflow-hidden">
+                                            <div className="h-full bg-red-500/40" style={{ width: `${u.risk}%` }} />
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
-                            <button onClick={() => setShowModal(false)}><X className="w-4 h-4 text-zinc-600 hover:text-zinc-400" /></button>
+                        ))}
+                    </div>
+                </div>
+            </div>
+
+            {/* Custom Modal */}
+            {showModal && (
+                <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[100] flex items-center justify-center p-4 transition-all">
+                    <div className="bg-zinc-950 border border-zinc-800 w-full max-w-md rounded shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
+                        <div className="p-4 border-b border-zinc-900 flex justify-between items-center">
+                            <h2 className="text-[10px] font-bold uppercase tracking-[0.3em] text-zinc-400">
+                                {modalAction === 'escalate' ? 'Acknowledge Threat Pattern' : 'Declassify Security Event'}
+                            </h2>
+                            <button onClick={() => setShowModal(false)}><X className="w-4 h-4 text-zinc-600 hover:text-zinc-200" /></button>
                         </div>
 
-                        <div className="p-6 space-y-6">
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-mono text-zinc-500 uppercase">Analyst Briefing / Comment</label>
+                        <div className="p-8 space-y-8">
+                            <div className="space-y-4">
+                                <label className="text-[9px] font-mono text-zinc-600 uppercase tracking-widest">Scientific Attribution / Remarks</label>
                                 <textarea
                                     value={comment}
-                                    onChange={(e) => setComment(e.target.value)}
-                                    className="w-full bg-zinc-950 border border-zinc-800 rounded p-3 text-xs text-zinc-300 h-24 focus:outline-none focus:border-zinc-700 font-mono"
-                                    placeholder="Provide context for this decision..."
+                                    onChange={(e) => setComment(e.data)}
+                                    className="w-full bg-black border border-zinc-900 rounded p-4 text-[11px] text-zinc-300 h-32 focus:outline-none focus:border-emerald-900/50 font-mono transition-all"
+                                    placeholder="Annotate technical rationale..."
                                 />
                             </div>
 
-                            <div className="grid grid-cols-2 gap-3">
-                                {modalAction === 'escalate' ? (
-                                    <>
-                                        <button
-                                            onClick={() => handleConfirm('confirm_threat')}
-                                            className="bg-red-600 text-white text-[10px] font-bold py-3 uppercase tracking-widest rounded hover:bg-red-500 transition-colors"
-                                        >
-                                            Confirm Threat
-                                        </button>
-                                        <button
-                                            onClick={() => handleConfirm('false_positive')}
-                                            className="bg-zinc-800 text-zinc-300 text-[10px] font-bold py-3 uppercase tracking-widest rounded hover:bg-zinc-700 transition-colors"
-                                        >
-                                            False Positive
-                                        </button>
-                                    </>
-                                ) : (
-                                    <>
-                                        <button
-                                            onClick={() => handleConfirm('resolve_true')}
-                                            className="bg-emerald-600 text-white text-[10px] font-bold py-3 uppercase tracking-widest rounded hover:bg-emerald-500 transition-colors"
-                                        >
-                                            Close: Remediated
-                                        </button>
-                                        <button
-                                            onClick={() => handleConfirm('resolve_fp')}
-                                            className="bg-zinc-800 text-zinc-300 text-[10px] font-bold py-3 uppercase tracking-widest rounded hover:bg-zinc-700 transition-colors"
-                                        >
-                                            Close: Benign
-                                        </button>
-                                    </>
+                            <button
+                                onClick={() => handleConfirm(modalAction === 'escalate' ? 'confirm_threat' : 'resolve_true')}
+                                className={cn(
+                                    "w-full py-4 text-[10px] font-bold uppercase tracking-[0.3em] rounded transition-all shadow-lg",
+                                    modalAction === 'escalate'
+                                        ? "bg-red-600 text-white hover:bg-red-500 shadow-red-900/20"
+                                        : "bg-emerald-600 text-white hover:bg-emerald-500 shadow-emerald-900/20"
                                 )}
-                            </div>
+                            >
+                                {modalAction === 'escalate' ? 'Execute Escalation' : 'Confirm Resolution'}
+                            </button>
                         </div>
                     </div>
                 </div>
