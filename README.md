@@ -41,7 +41,32 @@ Sentinel doesn't rely on just one algorithm. It uses a **Hybrid AI Ensemble**—
 *(3D Architecture Visual Placeholder - Awaiting Asset)*
 
 ### Data Pipeline Sequence
-![Sentinel Event Pipeline - Sequence Flow](assets/sequence_diagram.png)
+```mermaid
+sequenceDiagram
+    participant T as Telemetry System
+    participant B as Backend (FastAPI)
+    participant M as ML Ensemble (IF + AE + Context)
+    participant L as GenAI (Local Gemma3)
+    participant F as Frontend (React)
+
+    T->>B: Raw Auth Event (JSON)
+    B->>B: Feature Engineering (SHAP Vectors)
+    B->>M: Compute Anomaly Score
+    M-->>B: Global & Behavioral Risk Indices
+    
+    alt Risk > 40%
+        B->>L: Generate Behavioral Narration
+        L-->>B: Natural Language Interpretation
+    else Risk <= 40%
+        B->>B: Low-Priority Flagging
+    end
+
+    B->>F: Broadcast Event via WebSocket
+    Note over F: Real-time UI Update (Live Guard)
+    
+    F->>F: Data Triage (Risk-Based Sorting)
+    F->>F: Notification Dispatch (High Intensity)
+```
 *(Sequence Flow Placeholder - Awaiting Asset)*
 
 ---
