@@ -82,7 +82,7 @@ sequenceDiagram
 **The Drill-Down.** A view for investigating specific organizational units. It differentiates between a "Finance" team risk pattern and an "Engineering" team risk pattern.
 
 ### IDENTITY MATRIX (`/identities`)
-![Identity Matrix](assets/identity_matrix.png)
+![Identity Matrix](assets/identity_page.png)
 **The Roster.** A hierarchical breakdown of every identity in the system, color-coded by their real-time trust score.
 
 ---
