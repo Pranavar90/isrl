@@ -74,7 +74,7 @@ def train(params=None):
     scorer = HybridScorer(processor.user_context, config=params)
     
     print(f"Training ML Engine on {len(train_features)} samples...")
-    scorer.train_ml_engine(train_features)
+    scorer.train_ml_engine(train_features, raw_df=auth_df)
     
     # Save the model and processor context
     model_dir = os.path.join(base_dir, "models")
@@ -82,6 +82,7 @@ def train(params=None):
         os.makedirs(model_dir)
         
     joblib.dump(scorer.ml_model, os.path.join(model_dir, "isolation_forest.joblib"))
+    joblib.dump(scorer.G, os.path.join(model_dir, "knowledge_graph.joblib"))
     
     # Save Autoencoder (PyTorch State Dict + Metadata)
     torch.save({

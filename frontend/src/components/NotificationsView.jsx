@@ -8,7 +8,7 @@ function cn(...inputs) {
     return twMerge(clsx(inputs));
 }
 
-const NotificationsView = () => {
+const NotificationsView = ({ onNavigateToAlert }) => {
     const [alerts, setAlerts] = useState([]);
     const [loading, setLoading] = useState(true);
 
@@ -26,6 +26,12 @@ const NotificationsView = () => {
         fetchAlerts();
     }, []);
 
+    const handleAlertClick = (alert) => {
+        if (onNavigateToAlert) {
+            onNavigateToAlert(alert);
+        }
+    };
+
     if (loading) return <div className="text-zinc-600 font-mono text-xs p-10">Fetching Alert History...</div>;
 
     return (
@@ -37,7 +43,11 @@ const NotificationsView = () => {
 
             <div className="space-y-4">
                 {alerts.map((alert) => (
-                    <div key={alert.id} className="p-6 rounded-lg bg-[#0c0c0e] border border-zinc-900 flex justify-between items-center group hover:bg-zinc-900/10 transition-colors">
+                    <div
+                        key={alert.id}
+                        onClick={() => handleAlertClick(alert)}
+                        className="p-6 rounded-lg bg-[#0c0c0e] border border-zinc-900 flex justify-between items-center group hover:bg-zinc-900/20 hover:border-zinc-800 transition-all cursor-pointer"
+                    >
                         <div className="flex gap-4 items-center">
                             <div className={cn(
                                 "p-3 rounded-md border",
@@ -64,9 +74,9 @@ const NotificationsView = () => {
                             </div>
                         </div>
 
-                        <button className="p-2 text-zinc-700 hover:text-zinc-200 transition-colors">
+                        <div className="p-2 text-zinc-700 group-hover:text-zinc-400 transition-colors">
                             <ExternalLink className="w-4 h-4" />
-                        </button>
+                        </div>
                     </div>
                 ))}
 

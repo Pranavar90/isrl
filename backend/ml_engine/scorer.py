@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+import networkx as nx
 from sklearn.ensemble import IsolationForest
 import shap
 import torch
@@ -143,8 +144,13 @@ class HybridScorer:
         # Initialize Autoencoder behavioral engine
         input_dim = 10 # Matches the 10 features in FeatureEngineer
         self.ae_model = BehavioralAutoencoder(input_dim)
-        self.ae_weight = 0.5
+        
+        # Initialize Knowledge Graph
+        self.G = nx.Graph()
+        
+        self.ae_weight = 0.4
         self.if_weight = 0.2
+        self.graph_weight = 0.1
         self.rule_weight = 0.3
         
         self.explainer = None
@@ -161,8 +167,8 @@ class HybridScorer:
             score = max(score, 70)
         return score
 
-    def train_ml_engine(self, training_data):
-        """Train both Global (IF) and Behavioral (AE) models."""
+    def train_ml_engine(self, training_data, raw_df=None):
+        """Train Global (IF), Behavioral (AE), and Relational (Graph) models."""
         self.trained_features = training_data.columns.tolist()
         
         print("Training Global Isolation Forest...")
@@ -171,6 +177,10 @@ class HybridScorer:
         print("Training Neural Behavioral Autoencoder...")
         self.ae_model.fit(training_data)
         
+        if raw_df is not None:
+            print("Building Knowledge Graph from history...")
+            self.build_knowledge_graph(raw_df)
+
         if not isinstance(self.ml_model, TorchIsolationForest):
             self.explainer = shap.TreeExplainer(self.ml_model)
         else:
@@ -178,9 +188,49 @@ class HybridScorer:
             
         print(f"UEBA Pipeline trained on {len(self.trained_features)} features.")
 
+    def build_knowledge_graph(self, df):
+        """Build relationships between users and entities."""
+        self.G.clear()
+        for _, row in df.iterrows():
+            user = row['user']
+            ip = row['ip_address']
+            self.G.add_edge(user, ip)
+        print(f"Knowledge Graph built with {self.G.number_of_nodes()} entities.")
+
+    def get_graph_score(self, user, ip):
+        """Calculate score based on graph connectivity (0-100)."""
+        if not self.G.has_node(user):
+            return 50 # Unknown user
+            
+        # If user has never connected to this IP, it's a relational anomaly
+        if not self.G.has_edge(user, ip):
+            # Check centrality of the IP
+            if self.G.has_node(ip):
+                ip_centrality = self.G.degree(ip)
+                # If IP is highly central (like a common server), less risky
+                risk = 80 if ip_centrality < 5 else 30
+            else:
+                risk = 100 # Totally new IP
+            return risk
+            
+        return 0 # Existing relationship
+
     def get_ml_score(self, feature_vector):
         """Get anomaly score from Isolation Forest (scaled 0-100)."""
-        raw_score = self.ml_model.score_samples(feature_vector)[0]
+        # Convert to DataFrame to avoid sklearn feature names warning
+        import pandas as pd
+        feature_names = ['logon_count', 'file_count', 'pc_rarity', 'hour_deviation', 
+                        'location_distance', 'failed_attempts', 'ip_category', 
+                        'is_odd_hour', 'device_trust', 'baseline_confidence']
+        
+        if isinstance(feature_vector, np.ndarray):
+            if len(feature_vector.shape) == 1:
+                feature_vector = feature_vector.reshape(1, -1)
+            feature_df = pd.DataFrame(feature_vector, columns=feature_names[:feature_vector.shape[1]])
+        else:
+            feature_df = feature_vector
+            
+        raw_score = self.ml_model.score_samples(feature_df)[0]
         # Normalize score based on model type
         if isinstance(self.ml_model, TorchIsolationForest):
             # Torch model scores are already negative approximations
@@ -206,15 +256,20 @@ class HybridScorer:
         ae_raw = self.ae_model.score_samples(feature_vector)[0]
         ae_score = np.clip((ae_raw / (self.ae_model.threshold + 1e-9)) * 50, 0, 100)
         
-        # Ensemble Calculation: Rules (30%) + IF (20%) + AE (50%)
-        # AE is weighted heavily as it represents the true UEBA behavioral check
+        # 3. Graph Score (Relational Anomaly)
+        user = event.get('user', 'Unknown')
+        ip = event.get('ip_address', 'Unknown')
+        graph_score = self.get_graph_score(user, ip)
+
+        # Ensemble Calculation: Rules (30%) + IF (20%) + AE (40%) + Graph (10%)
         final_score = (rule_score * self.rule_weight) + \
                       (if_score * self.if_weight) + \
-                      (ae_score * self.ae_weight)
+                      (ae_score * self.ae_weight) + \
+                      (graph_score * self.graph_weight)
         
         explanation = None
         if final_score > 25: # Lowered threshold for context
-            explanation = self.generate_xai_summary(feature_vector, rule_score, final_score, event, if_score, ae_score)
+            explanation = self.generate_xai_summary(feature_vector, rule_score, final_score, event, if_score, ae_score, graph_score)
              
         return {
             "score": round(final_score, 2),
@@ -223,11 +278,14 @@ class HybridScorer:
             "explanation": explanation
         }
 
-    def generate_xai_summary(self, feature_vector, rule_score, final_score=0, event=None, if_score=0, ae_score=0):
+    def generate_xai_summary(self, feature_vector, rule_score, final_score=0, event=None, if_score=0, ae_score=0, graph_score=0):
         """Generate high-fidelity UEBA summary."""
         summary = ""
         if rule_score > 60:
             summary += "Critical: High-risk security rules triggered. "
+        
+        if graph_score > 70:
+            summary += "Relational Anomaly: User connecting to an unfamiliar or isolated entity. "
         
         if ae_score > 70:
             summary += "Significant behavioral shift detected against user baseline. "

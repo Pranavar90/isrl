@@ -1,0 +1,20 @@
+[
+    {
+        "alert_id": "evt_244bed9f",
+        "action": "resolve_true",
+        "timestamp": "2026-02-04T15:34:46.623303",
+        "comment": ""
+    },
+    {
+        "alert_id": "evt_b8b34fe7",
+        "action": "confirm_threat",
+        "timestamp": "2026-02-04T16:27:14.871986",
+        "comment": ""
+    },
+    {
+        "alert_id": "evt_5823c976",
+        "action": "confirm_threat",
+        "timestamp": "2026-02-04T16:47:00.246049",
+        "comment": ""
+    }
+]

@@ -34,16 +34,24 @@ function App() {
     monitoredUsers: 5000
   });
 
-  const handleAction = async (alertId, action) => {
+  const handleAction = async (alertId, action, comment = '') => {
     try {
       await axios.post('http://localhost:8000/alerts/action', {
         alert_id: alertId,
-        action: action
+        action: action,
+        comment: comment
       });
-      setNotification({ type: action, message: `System: node_${alertId} ${action === 'escalate' ? 'escalated to L2' : 'cleared from queue'}` });
+
+      const displayAction = action.replace('_', ' ').toUpperCase();
+      setNotification({
+        type: action.includes('confirm') ? 'escalate' : 'success',
+        message: `System: Action [${displayAction}] recorded for alert_${alertId.slice(-6)}`
+      });
+
       setTimeout(() => setNotification(null), 3000);
       setSelectedAlert(null);
-      if (action === 'escalate') {
+
+      if (action.includes('confirm') || action === 'escalate') {
         setStats(prev => ({ ...prev, highRisk: Math.max(0, prev.highRisk - 1) }));
       }
     } catch (err) {
@@ -51,6 +59,11 @@ function App() {
       setNotification({ type: 'error', message: 'CRITICAL: Operation broadcast failure' });
       setTimeout(() => setNotification(null), 5000);
     }
+  };
+
+  const handleNotificationClick = (alert) => {
+    setSelectedAlert(alert);
+    setCurrentView('dashboard');
   };
 
   const navItems = [
@@ -117,7 +130,7 @@ function App() {
       case 'users':
         return <div className="flex-1 overflow-y-auto"><IdentityMatrix /></div>;
       case 'alerts':
-        return <div className="flex-1 overflow-y-auto"><NotificationsView /></div>;
+        return <div className="flex-1 overflow-y-auto"><NotificationsView onNavigateToAlert={handleNotificationClick} /></div>;
       default:
         return null;
     }

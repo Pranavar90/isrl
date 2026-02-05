@@ -9,6 +9,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
+import random
 
 # Path setup
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'data_processor')))
@@ -49,18 +50,20 @@ def load_resources():
         # Get base dir (root of the project)
         base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
         model_path = os.path.join(base_dir, "backend", "models", "isolation_forest.joblib")
+        graph_path = os.path.join(base_dir, "backend", "models", "knowledge_graph.joblib")
         ae_path = os.path.join(base_dir, "backend", "models", "autoencoder.pth")
         context_path = os.path.join(base_dir, "backend", "models", "user_context.joblib")
         config_path = os.path.join(base_dir, "backend", "models", "model_config.joblib")
         data_path = os.path.join(base_dir, "backend", "data")
         
-        if os.path.exists(model_path) and os.path.exists(ae_path) and os.path.exists(context_path):
+        if os.path.exists(model_path) and os.path.exists(ae_path) and os.path.exists(context_path) and os.path.exists(graph_path):
             user_context = joblib.load(context_path)
             ml_model = joblib.load(model_path)
             config = joblib.load(config_path) if os.path.exists(config_path) else None
             
             scorer = HybridScorer(user_context, config=config)
             scorer.ml_model = ml_model
+            scorer.G = joblib.load(graph_path) # Load Knowledge Graph
             
             # Load Autoencoder state
             import torch
@@ -157,23 +160,25 @@ async def log_replayer():
         }
         
         # 4. Asynchronous GenAI Narration for all detected anomalies
-        if analyst and analyst.enabled and payload['score'] > 20: # Lowered threshold drastically
+        if analyst and analyst.enabled and payload['score'] > 20: 
             top_fs = score_result['explanation'].get('top_features', []) if score_result['explanation'] else []
             user_ctx = processor.user_context.get(payload['user'])
             
-            # Using to_thread for non-blocking LLM call
-            narrative = await asyncio.to_thread(
-                analyst.generate_narrative, 
-                event, 
-                payload['score'], 
-                top_fs, 
-                user_ctx
-            )
-            if narrative:
-                payload['summary'] = narrative
+            # Fire and forget GenAI task OR await it if we want it in the same message.
+            # To speed up, we will only await for VERY HIGH risk.
+            if payload['score'] > 85:
+                narrative = await asyncio.to_thread(
+                    analyst.generate_narrative, 
+                    event, payload['score'], top_fs, user_ctx
+                )
+                if narrative:
+                    payload['summary'] = narrative
+            else:
+                # For medium risk, don't wait - keep the stream fast
+                pass
         
         await manager.broadcast(json.dumps(payload))
-        await asyncio.sleep(1) # Replay delay
+        await asyncio.sleep(0.1) # Replay delay (Faster Firehose)
 
 @app.on_event("startup")
 async def startup_event():
@@ -209,24 +214,45 @@ async def get_node_metrics():
 
 @app.get("/metrics/identities")
 async def get_identity_metrics():
-    """Returns user profiles and their risk status."""
+    """Returns hierarchical user profiles organized by Department -> Location -> Users."""
     if processor is None or not processor.user_context:
-        return []
+        return {"departments": []}
     
-    identities = []
-    # Take a sample for the UI
-    sample_users = list(processor.user_context.keys())[:20]
-    for uid in sample_users:
-        ctx = processor.user_context[uid]
-        identities.append({
+    # Build hierarchical structure
+    dept_structure = {}
+    
+    for uid, ctx in processor.user_context.items():
+        dept = ctx.get('department', 'Unknown')
+        loc = ctx.get('normal_login_location', 'Unknown')
+        
+        if dept not in dept_structure:
+            dept_structure[dept] = {}
+        
+        if loc not in dept_structure[dept]:
+            dept_structure[dept][loc] = []
+        
+        dept_structure[dept][loc].append({
             "user": uid,
-            "department": ctx.get('department'),
-            "type": ctx.get('user_type'),
-            "trust": ctx.get('trust_score_base'),
-            "location": ctx.get('normal_login_location'),
+            "type": ctx.get('user_type', 'Standard'),
+            "trust": ctx.get('trust_score_base', 50),
             "status": "active"
         })
-    return identities
+    
+    # Convert to list format for frontend
+    departments = []
+    for dept_name, locations in dept_structure.items():
+        dept_obj = {
+            "name": dept_name,
+            "locations": []
+        }
+        for loc_name, users in locations.items():
+            dept_obj["locations"].append({
+                "name": loc_name,
+                "users": users
+            })
+        departments.append(dept_obj)
+    
+    return {"departments": departments}
 
 @app.get("/alerts/history")
 async def get_alert_history():
@@ -249,11 +275,61 @@ async def get_alert_history():
             })
     return history
 
+@app.get("/metrics/graph")
+async def get_graph_data():
+    """Export the Knowledge Graph in JSON format for the force-directed view."""
+    if not models_loaded or scorer is None or scorer.G is None:
+        return {"nodes": [], "links": []}
+    
+    # Sample nodes/edges to avoid overwhelming the frontend
+    # Filter for nodes with distance to critical incidents or just a sample
+    sample_nodes = list(scorer.G.nodes())[:100] 
+    subgraph = scorer.G.subgraph(sample_nodes)
+    
+    nodes = []
+    for node in subgraph.nodes():
+        node_type = "user" if "(" in str(node) else "resource"
+        nodes.append({
+            "id": node,
+            "type": node_type,
+            "val": 10 if node_type == "user" else 5
+        })
+    
+    links = []
+    for edge in subgraph.edges():
+        links.append({
+            "source": edge[0],
+            "target": edge[1]
+        })
+        
+    return {"nodes": nodes, "links": links}
+
 @app.post("/alerts/action")
 async def process_alert(action: AlertAction):
+    """Enhanced analyst feedback flow."""
     print(f"Action received: {action.action} for alert {action.alert_id}")
+    
+    # Store labels for retraining
+    base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    labels_file = os.path.join(base_dir, "backend", "models", "feedback_labels.json")
+    labels = []
+    if os.path.exists(labels_file):
+        try:
+            with open(labels_file, "r") as f:
+                labels = json.load(f)
+        except: pass
+    
+    labels.append({
+        "alert_id": action.alert_id,
+        "action": action.action,
+        "timestamp": datetime.now().isoformat(),
+        "comment": action.comment
+    })
+    
+    with open(labels_file, "w") as f:
+        json.dump(labels, f, indent=4)
+        
     if action.action == "escalate":
         escalated_alerts.append(action.alert_id)
-    return {"status": "success", "action": action.action}
-
-import random # Ensure random is available for mocks
+        
+    return {"status": "success", "message": f"Recorded {action.action}"}

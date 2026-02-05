@@ -9,19 +9,48 @@ import {
     CheckCircle2,
     Users,
     Activity,
-    Info
+    Info,
+    Share2,
+    X,
+    MessageSquare,
+    AlertTriangle
 } from 'lucide-react';
+import ForceGraph2D from 'react-force-graph-2d';
+import axios from 'axios';
 
 const DeepDiveView = ({ alert, onAction }) => {
+    const [graphData, setGraphData] = React.useState({ nodes: [], links: [] });
+    const [showModal, setShowModal] = React.useState(false);
+    const [comment, setComment] = React.useState('');
+    const [modalAction, setModalAction] = React.useState(null);
+
+    React.useEffect(() => {
+        const fetchGraph = async () => {
+            try {
+                const res = await axios.get('http://localhost:8000/metrics/graph');
+                setGraphData(res.data);
+            } catch (err) {
+                console.error("Failed to fetch graph", err);
+            }
+        };
+        fetchGraph();
+    }, [alert.id]);
+
+    const handleConfirm = (type) => {
+        onAction(alert.id, type, comment);
+        setShowModal(false);
+        setComment('');
+    };
+
     // Use real SHAP features if available, else mock
     const shapFeatures = alert.shap && alert.features ? alert.features.map((f, i) => ({
         feature: f,
         contribution: alert.shap[i],
         description: Math.abs(alert.shap[i]) > 0.1 ? `Primary deviation factor` : 'Minor variance'
     })) : [
-        { feature: 'logon_count', contribution: 0.15, description: 'Slightly above mean' },
-        { feature: 'file_count', contribution: 0.65, description: 'Significant outlier activity' },
-        { feature: 'pc_rarity', contribution: 0.25, description: 'Atypical resource interaction' },
+        { feature: 'device_trust', contribution: 0.15, description: 'Slightly above mean' },
+        { feature: 'failed_attempts', contribution: 0.65, description: 'Significant outlier activity' },
+        { feature: 'location_rarity', contribution: 0.25, description: 'Atypical resource interaction' },
     ];
 
     const peerData = [
@@ -56,14 +85,14 @@ const DeepDiveView = ({ alert, onAction }) => {
 
                 <div className="flex gap-2">
                     <button
-                        onClick={() => onAction(alert.id, 'dismiss')}
-                        className="h-9 px-4 text-xs font-semibold bg-zinc-900 text-zinc-400 border border-border hover:bg-zinc-800 hover:text-zinc-200 transition-all rounded transition-colors"
+                        onClick={() => { setModalAction('resolve'); setShowModal(true); }}
+                        className="h-9 px-4 text-xs font-semibold bg-zinc-900 text-zinc-400 border border-zinc-800 hover:bg-zinc-800 hover:text-zinc-200 transition-all rounded"
                     >
                         Resolve Event
                     </button>
                     <button
-                        onClick={() => onAction(alert.id, 'escalate')}
-                        className="h-9 px-4 text-xs font-semibold bg-red-950 text-red-200 border border-red-900 hover:bg-red-900 transition-all rounded transition-colors"
+                        onClick={() => { setModalAction('escalate'); setShowModal(true); }}
+                        className="h-9 px-4 text-xs font-semibold bg-red-950 text-red-200 border border-red-900 hover:bg-red-900 transition-all rounded text-red-50"
                     >
                         Escalate Node
                     </button>
@@ -148,8 +177,95 @@ const DeepDiveView = ({ alert, onAction }) => {
                         <span>Ref_Standard: 4.2r_LSCERT</span>
                         <span>Dev_Threshold: 1.84 sigma</span>
                     </div>
+
+                    {/* Relational Knowledge Graph */}
+                    <div className="mt-10 space-y-6">
+                        <div className="flex items-center gap-3 border-b border-zinc-800 pb-3">
+                            <Share2 className="w-4 h-4 text-zinc-500" />
+                            <h3 className="text-xs font-bold uppercase tracking-widest text-zinc-400">Relational Knowledge Graph</h3>
+                        </div>
+                        <div className="h-[300px] w-full bg-zinc-950/50 border border-zinc-900 rounded-lg overflow-hidden relative">
+                            <ForceGraph2D
+                                graphData={graphData}
+                                nodeLabel="id"
+                                nodeAutoColorBy="type"
+                                nodeRelSize={6}
+                                linkDirectionalParticles={1}
+                                linkDirectionalParticleSpeed={0.01}
+                                backgroundColor="#09090b"
+                                height={300}
+                                width={500}
+                            />
+                            <div className="absolute bottom-2 right-2 text-[8px] font-mono text-zinc-700 bg-zinc-950 px-2 py-0.5 border border-zinc-900 uppercase">
+                                Subgraph_Mode: Active_Proximity
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
+
+            {/* Custom Modal for Escalation/Resolution */}
+            {showModal && (
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+                    <div className="bg-zinc-900 border border-zinc-800 w-full max-w-md rounded-lg shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+                        <div className="p-4 border-b border-zinc-800 flex justify-between items-center bg-zinc-900/50">
+                            <div className="flex items-center gap-2">
+                                {modalAction === 'escalate' ? <AlertTriangle className="w-4 h-4 text-red-500" /> : <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
+                                <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-zinc-200">
+                                    {modalAction === 'escalate' ? 'Escalation Protocol' : 'Resolution Protocol'}
+                                </h2>
+                            </div>
+                            <button onClick={() => setShowModal(false)}><X className="w-4 h-4 text-zinc-600 hover:text-zinc-400" /></button>
+                        </div>
+
+                        <div className="p-6 space-y-6">
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-mono text-zinc-500 uppercase">Analyst Briefing / Comment</label>
+                                <textarea
+                                    value={comment}
+                                    onChange={(e) => setComment(e.target.value)}
+                                    className="w-full bg-zinc-950 border border-zinc-800 rounded p-3 text-xs text-zinc-300 h-24 focus:outline-none focus:border-zinc-700 font-mono"
+                                    placeholder="Provide context for this decision..."
+                                />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-3">
+                                {modalAction === 'escalate' ? (
+                                    <>
+                                        <button
+                                            onClick={() => handleConfirm('confirm_threat')}
+                                            className="bg-red-600 text-white text-[10px] font-bold py-3 uppercase tracking-widest rounded hover:bg-red-500 transition-colors"
+                                        >
+                                            Confirm Threat
+                                        </button>
+                                        <button
+                                            onClick={() => handleConfirm('false_positive')}
+                                            className="bg-zinc-800 text-zinc-300 text-[10px] font-bold py-3 uppercase tracking-widest rounded hover:bg-zinc-700 transition-colors"
+                                        >
+                                            False Positive
+                                        </button>
+                                    </>
+                                ) : (
+                                    <>
+                                        <button
+                                            onClick={() => handleConfirm('resolve_true')}
+                                            className="bg-emerald-600 text-white text-[10px] font-bold py-3 uppercase tracking-widest rounded hover:bg-emerald-500 transition-colors"
+                                        >
+                                            Close: Remediated
+                                        </button>
+                                        <button
+                                            onClick={() => handleConfirm('resolve_fp')}
+                                            className="bg-zinc-800 text-zinc-300 text-[10px] font-bold py-3 uppercase tracking-widest rounded hover:bg-zinc-700 transition-colors"
+                                        >
+                                            Close: Benign
+                                        </button>
+                                    </>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
