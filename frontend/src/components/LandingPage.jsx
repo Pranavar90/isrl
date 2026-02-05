@@ -50,9 +50,12 @@ const LandingPage = () => {
             {/* Header */}
             <div className="flex items-center justify-between border-b border-zinc-800/50 pb-6">
                 <div>
-                    <div className="flex items-center gap-3 mb-1">
-                        <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                        <h2 className="text-2xl font-mono font-bold text-zinc-100 uppercase tracking-widest leading-none">Global Overview // Real-time Threat Telemetry</h2>
+                    <div className="flex items-start gap-3 mb-1">
+                        <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse mt-2" />
+                        <div>
+                            <h2 className="text-2xl font-mono font-bold text-zinc-100 uppercase tracking-widest leading-none mb-1">Global Overview</h2>
+                            <p className="text-xs text-zinc-500 font-mono uppercase tracking-[0.3em]">Real-time Threat Telemetry</p>
+                        </div>
                     </div>
                 </div>
             </div>
