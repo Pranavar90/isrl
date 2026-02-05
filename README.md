@@ -8,35 +8,9 @@ Sentinel is a high-fidelity **User and Entity Behavior Analytics (UEBA)** platfo
 
 Sentinel employs a modular architecture designed for horizontal scalability and high-throughput real-time analysis.
 
-```mermaid
-graph TD
-    subgraph "Data Ingestion Layer"
-        AL[Auth Logs] --> DP[Data Processor]
-        LL[LDAP Logs] --> DP
-        DP --> FE[Feature Engineering Engine]
-    end
+![Sentinel Architecture - Hybrid AI Engine](assets/architecture_diagram.png)
 
-    subgraph "Detection Engine (Hybrid Ensemble)"
-        FE --> IF[Isolation Forest: Global Outliers]
-        FE --> AE[Autoencoder: Behavioral Latent Space]
-        FE --> HR[Heuristic Rules: Deterministic Checks]
-        FE --> CS[Context Scorer: HR & Lifecycle Logic]
-    end
-
-    subgraph "Intelligence Synthesis"
-        IF --> SN[Score Normalizer]
-        AE --> SN
-        HR --> SN
-        CS --> SN
-        SN --> GA[GenAI Analyst: Gemma3 Narration]
-    end
-
-    subgraph "Operational Interface"
-        GA --> API[FastAPI Backend]
-        API --> WS[WebSocket Live Stream]
-        WS --> UI[React Dashboard]
-    end
-```
+> *The architecture features a dual-stream pipeline: Statistical outlier detection (Isolation Forest) runs in parallel with deep behavioral learning (Autoencoder), converging at the GenAI interpretation layer.*
 
 ---
 
@@ -44,32 +18,25 @@ graph TD
 
 The lifecycle of an event from raw telemetry to analyst notification follows a strict pipeline of scoring and narration.
 
-```mermaid
-sequenceDiagram
-    participant T as Telemetry System
-    participant B as Backend (FastAPI)
-    participant M as ML Ensemble (IF + AE + Context)
-    participant L as GenAI (Local Gemma3)
-    participant F as Frontend (React)
+![Sentinel Event Pipeline - Sequence Flow](assets/sequence_diagram.png)
 
-    T->>B: Raw Auth Event (JSON)
-    B->>B: Feature Engineering (SHAP Vectors)
-    B->>M: Compute Anomaly Score
-    M-->>B: Global & Behavioral Risk Indices
-    
-    alt Risk > 40%
-        B->>L: Generate Behavioral Narration
-        L-->>B: Natural Language Interpretation
-    else Risk <= 40%
-        B->>B: Low-Priority Flagging
-    end
+---
 
-    B->>F: Broadcast Event via WebSocket
-    Note over F: Real-time UI Update (Live Guard)
-    
-    F->>F: Data Triage (Risk-Based Sorting)
-    F->>F: Notification Dispatch (High Intensity)
-```
+## 📸 Interface
+
+### Global Operations Center (`/landing`)
+![Global Operations Dashboard](assets/landing_page.png)
+*Real-time telemetry showing active threats, risk distribution, and node status.*
+
+### Departmental Intelligence (`/dept`)
+![Department Analysis View](assets/dept_page.png)
+*Drill-down views into organizational units, tracking risk velocity and behavioral shifts.*
+
+### Identity Matrix
+![Identity Matrix](assets/identity_page.png)
+*Hierarchical roster of 5,000+ users with real-time risk scoring and status indicators.*
+
+---
 
 ---
 
