@@ -6,7 +6,7 @@ import os
 import time
 
 # Configurations
-TOTAL_EVENTS = 500000
+TOTAL_EVENTS = 1000000
 TOTAL_EMPLOYEES = 5000
 NUM_CORES = mp.cpu_count()
 CHUNK_SIZE = TOTAL_EVENTS // NUM_CORES
@@ -16,7 +16,10 @@ DEPARTMENTS = ['Finance', 'HR', 'Sales', 'Database Mgmt', 'Customer Support', 'I
 USER_TYPES = ['Admin', 'Privileged', 'Standard']
 DEVICE_TYPES = ['Personal_Laptop', 'Corporate_Laptop', 'Mobile_Device', 'Server']
 LOCATIONS = ['Bengaluru', 'Tokyo', 'Berlin', 'Sydney', 'New York', 'London', 'Paris', 'San Francisco', 'Singapore', 'Mumbai']
+LOCATIONS = ['Bengaluru', 'Tokyo', 'Berlin', 'Sydney', 'New York', 'London', 'Paris', 'San Francisco', 'Singapore', 'Mumbai']
 IP_CATEGORIES = ['Normal', 'Malicious']
+LIFECYCLE_STATES = ['Active', 'Resigned', 'Notice_Period', 'Dormant']
+DEPT_SHIFT_WINDOW_DAYS = 30
 
 FIRST_NAMES = ['Aarav', 'Sneha', 'Rajiv', 'Daniel', 'Nisha', 'Riya', 'Komal', 'Pranav', 'Anjali', 'Vikram', 
                'John', 'Emma', 'Liam', 'Olivia', 'Noah', 'Ava', 'Sophia', 'Ethan', 'Isabella', 'Mason']
@@ -32,12 +35,26 @@ def generate_profiles(n=TOTAL_EMPLOYEES):
         dept = random.choice(DEPARTMENTS)
         u_type = random.choice(USER_TYPES)
         loc = random.choice(LOCATIONS)
+        
+        # Vinfi Feature: Lifecycle State
+        lifecycle = np.random.choice(LIFECYCLE_STATES, p=[0.90, 0.05, 0.03, 0.02])
+        
+        # Vinfi Feature: Department Shift
+        recent_dept_change = False
+        prev_dept = None
+        if np.random.random() < 0.08: # 8% chance of recent shift
+            recent_dept_change = True
+            prev_dept = random.choice([d for d in DEPARTMENTS if d != dept])
+
         # Shift profiles slightly towards specific devices/hours
         normal_hour = random.randint(8, 18)
         profiles.append({
             'user': name,
             'department': dept,
             'user_type': u_type,
+            'lifecycle_state': lifecycle,
+            'recent_dept_change': recent_dept_change,
+            'previous_department': prev_dept,
             'normal_login_location': loc,
             'normal_hour': normal_hour,
             'trust_score_base': random.randint(50, 95)
@@ -111,7 +128,12 @@ def generate_chunk(chunk_id, profiles, count):
             'location_distance_km': dist,
             'ip_category_encoded': 1 if ip_cat == 'Malicious' else 0,
             'is_odd_hour_numeric': 1 if is_odd_hour else 0,
-            'baseline_confidence': conf
+            'baseline_confidence': conf,
+            
+            # Vinfi Context Features
+            'lifecycle_state': prof['lifecycle_state'],
+            'recent_dept_change': prof['recent_dept_change'],
+            'previous_department': prof['previous_department']
         })
         
     return events

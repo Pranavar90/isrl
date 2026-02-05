@@ -20,13 +20,15 @@ graph TD
         FE --> IF[Isolation Forest: Global Outliers]
         FE --> AE[Autoencoder: Behavioral Latent Space]
         FE --> HR[Heuristic Rules: Deterministic Checks]
+        FE --> CS[Context Scorer: HR & Lifecycle Logic]
     end
 
     subgraph "Intelligence Synthesis"
         IF --> SN[Score Normalizer]
         AE --> SN
         HR --> SN
-        SN --> GA[GenAI Analyst: Phi-3 Narration]
+        CS --> SN
+        SN --> GA[GenAI Analyst: Gemma3 Narration]
     end
 
     subgraph "Operational Interface"
@@ -46,8 +48,8 @@ The lifecycle of an event from raw telemetry to analyst notification follows a s
 sequenceDiagram
     participant T as Telemetry System
     participant B as Backend (FastAPI)
-    participant M as ML Ensemble (IF + AE)
-    participant L as GenAI (Local Phi-3)
+    participant M as ML Ensemble (IF + AE + Context)
+    participant L as GenAI (Local Gemma3)
     participant F as Frontend (React)
 
     T->>B: Raw Auth Event (JSON)
@@ -75,11 +77,12 @@ sequenceDiagram
 
 ### 1. Hybrid Intelligence Model
 - **Isolation Forest (Global)**: Analyzes the entire dataset to find "rare" events that stand out statistically across the whole company.
-- **Deep Autoencoder (Behavioral)**: Learns the "normal" manifold of an individual user. If a user's behavior changes relative to their own past (even if it's statistically "normal" for the company), the latent space reconstruction error spikes.
+- **Deep Autoencoder (Behavioral)**: Learns the "normal" manifold of an individual user. If a user's behavior changes relative to their own past, the reconstruction error spikes.
+- **Context-Aware Scorer:** Actively monitors HR signals. A user in "Notice Period" or "Resigned" state, or one who recently changed departments, triggers elevated scrutiny.
 - **Heuristic Rules**: Deterministic safety checks like *Impossible Travel* and *Known-Malicious Geo-Vectors*.
 
 ### 2. GenAI "Interpretive" Layer
-While traditional ML gives you a score, Sentinel's **GenAI Analyst** (running local Phi-3) explains *why* the score is high. It examines the SHAP attribution coefficients and translates mathematical anomalies into human-readable narratives.
+While traditional ML gives you a score, Sentinel's **GenAI Analyst** (running local Gemma3) explains *why* the score is high. It examines the SHAP attribution coefficients and translates mathematical anomalies into human-readable narratives.
 
 ### 3. Real-time Triage (Notification Center)
 The dashboard features a **Risk-Partitioned Queue**:

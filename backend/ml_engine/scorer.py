@@ -256,33 +256,78 @@ class HybridScorer:
         ae_raw = self.ae_model.score_samples(feature_vector)[0]
         ae_score = np.clip((ae_raw / (self.ae_model.threshold + 1e-9)) * 50, 0, 100)
         
-        # 3. Graph Score (Relational Anomaly)
+        # 4. Graph Score (Relational Anomaly)
         user = event.get('user', 'Unknown')
         ip = event.get('ip_address', 'Unknown')
         graph_score = self.get_graph_score(user, ip)
 
-        # Ensemble Calculation: Rules (30%) + IF (20%) + AE (40%) + Graph (10%)
-        final_score = (rule_score * self.rule_weight) + \
-                      (if_score * self.if_weight) + \
-                      (ae_score * self.ae_weight) + \
-                      (graph_score * self.graph_weight)
+        # 5. Context Score (Vinfi Integration)
+        context_score, context_reasons = self.calculate_context_score(event)
+        
+        # Ensemble Calculation: Rules (25%) + IF (15%) + AE (35%) + Graph (10%) + Context (15%)
+        # Adjusted weights to accommodate the new Context layer
+        final_score = (rule_score * 0.25) + \
+                      (if_score * 0.15) + \
+                      (ae_score * 0.35) + \
+                      (graph_score * 0.10) + \
+                      (context_score * 0.15)
         
         explanation = None
-        if final_score > 15: # Lowered threshold to ensure single-factor anomalies (like failed attempts) trigger summaries
-            explanation = self.generate_xai_summary(feature_vector, rule_score, final_score, event, if_score, ae_score, graph_score)
+        if final_score > 15:
+            # Pass all scores to explanation including context
+            explanation = self.generate_xai_summary(feature_vector, rule_score, final_score, event, if_score, ae_score, graph_score, context_score, context_reasons)
              
         return {
             "score": round(final_score, 2),
             "rule_score": rule_score,
-            "ml_score": round((if_score + ae_score)/2, 2), # Composite ML score for UI
+            "ml_score": round((if_score + ae_score)/2, 2),
+            "context_score": context_score,
             "explanation": explanation
         }
 
-    def generate_xai_summary(self, feature_vector, rule_score, final_score=0, event=None, if_score=0, ae_score=0, graph_score=0):
+    def calculate_context_score(self, event):
+        """
+        Vinfi-style Context Scoring:
+        Penalizes risk based on User Lifecycle, Department shifts, and Roles.
+        """
+        score = 0
+        reasons = []
+        
+        # 1. Lifecycle Analysis
+        lifecycle = event.get('lifecycle_state', 'Active')
+        if lifecycle == 'Resigned':
+            score += 80 # Very High Risk for Resigned users
+            reasons.append("User is in RESIGNED state (Insider Threat Risk)")
+        elif lifecycle == 'Notice_Period':
+            score += 40
+            reasons.append("User serving Notice Period (Flight Risk)")
+            
+        # 2. Department Shift (New integration)
+        if event.get('recent_dept_change') is True or str(event.get('recent_dept_change')).lower() == "true":
+            score += 25
+            reasons.append("Recent Department Change detected (Possible Privilege Escalation)")
+
+        # 3. Privileged Role Context (Vinfi)
+        role = event.get('user_type', 'Standard')
+        if role in ['Admin', 'Privileged']:
+            # Admins are inherently riskier targets
+            score += 10
+            reasons.append(f"High-Privilege Role: {role}")
+            
+        return min(100, score), reasons
+
+    def generate_xai_summary(self, feature_vector, rule_score, final_score=0, event=None, if_score=0, ae_score=0, graph_score=0, context_score=0, context_reasons=[]):
         """Generate high-fidelity UEBA summary."""
         summary = ""
+        
+        if context_reasons:
+             summary += f"Context Alert: {', '.join(context_reasons)}. "
+             
         if rule_score > 60:
             summary += "Critical: High-risk security rules triggered. "
+            
+        if context_score > 50:
+            summary += "Context Alert: High risk associated with user lifecycle or recent department change. "
         
         if graph_score > 70:
             summary += "Relational Anomaly: User connecting to an unfamiliar or isolated entity. "
@@ -293,7 +338,6 @@ class HybridScorer:
             summary += "Global statistical outlier detected. "
         else:
             summary += "Monitoring minor behavioral variances. "
-
         # Get feature importance from the neural Autoencoder
         ae_importances = self.ae_model.get_feature_importance(feature_vector)[0]
         top_indices = np.argsort(ae_importances)[-3:][::-1]

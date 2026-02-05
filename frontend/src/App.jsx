@@ -14,9 +14,15 @@ import {
   Database,
   Bell,
   Settings,
-  ChevronRight
+  ChevronRight,
+  Home,
+  Building2,
+  FlaskConical
 } from 'lucide-react';
 import axios from 'axios';
+import LandingPage from './components/LandingPage';
+import DeptAnalysis from './components/DeptAnalysis';
+import ScenarioSimulator from './components/ScenarioSimulator';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -25,7 +31,7 @@ function cn(...inputs) {
 }
 
 function App() {
-  const [currentView, setCurrentView] = useState('dashboard');
+  const [currentView, setCurrentView] = useState('landing');
   const [selectedAlert, setSelectedAlert] = useState(null);
   const [notification, setNotification] = useState(null);
   const [connectionStatus, setConnectionStatus] = useState('disconnected');
@@ -114,7 +120,10 @@ function App() {
   };
 
   const navItems = [
-    { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+    { id: 'landing', icon: Home, label: 'Overview' },
+    { id: 'dashboard', icon: LayoutDashboard, label: 'Live Operations' },
+    { id: 'dept', icon: Building2, label: 'Department Intelligence' },
+    { id: 'simulator', icon: FlaskConical, label: 'Risk Simulator' },
     { id: 'nodes', icon: Database, label: 'Data Nodes' },
     { id: 'users', icon: Users, label: 'Identity Matrix' },
     { id: 'alerts', icon: Bell, label: 'Notifications' },
@@ -122,6 +131,12 @@ function App() {
 
   const renderContent = () => {
     switch (currentView) {
+      case 'landing':
+        return <div className="flex-1 overflow-y-auto"><LandingPage /></div>;
+      case 'dept':
+        return <div className="flex-1 overflow-y-auto"><DeptAnalysis /></div>;
+      case 'simulator':
+        return <div className="flex-1 overflow-y-auto"><ScenarioSimulator /></div>;
       case 'dashboard':
         return (
           <main className="flex-1 flex overflow-hidden">

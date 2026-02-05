@@ -80,9 +80,10 @@ class GenAIAnalyst:
         Sometimes our behavioral model flags events as "Anomalous" (High Risk Score) even if they look "Normal" on the surface. This happens when the mathematical signature of the behavior deviates from the user's historical baseline.
         
         INSTRUCTIONS:
-        1. Write a 2-sentence professional analysis.
-        2. EXPLAIN WHY the SHAP features ({', '.join(top_features)}) caused the score to increase.
-        3. Maintain a formal, enterprise-grade tone. Do not use placeholders.
+        1. Start DIRECTLY with the analysis. Do NOT use phrases like "Here is the analysis" or "Based on the report".
+        2. Write exactly 2 professional sentences analyzing the risk.
+        3. Explain the specific contribution of the SHAP features ({', '.join(top_features)}).
+        4. Maintain a strict, military-grade SOC reporting tone.
         """
 
         try:

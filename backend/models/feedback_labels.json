@@ -40,5 +40,23 @@
         "action": "confirm_threat",
         "timestamp": "2026-02-05T15:08:05.612310",
         "comment": ""
+    },
+    {
+        "alert_id": "E998088",
+        "action": "resolve_true",
+        "timestamp": "2026-02-06T00:51:48.429591",
+        "comment": ""
+    },
+    {
+        "alert_id": "E999001",
+        "action": "resolve_true",
+        "timestamp": "2026-02-06T01:35:58.433113",
+        "comment": ""
+    },
+    {
+        "alert_id": "E999004",
+        "action": "resolve_true",
+        "timestamp": "2026-02-06T01:36:10.062809",
+        "comment": ""
     }
 ]
