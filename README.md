@@ -1,123 +1,100 @@
-# 🛡️ Sentinel UEBA: Advanced Multi-Model Insider Threat Detection
+# 🛡️ Sentinel UEBA: Advanced Insider Threat Detection
 
-Sentinel is a high-fidelity **User and Entity Behavior Analytics (UEBA)** platform designed to detect subtle, sophisticated insider threats within enterprise environments. By combining deep learning, statistical ensembles, and GenAI, Sentinel transforms raw telemetry into actionable, high-context intelligence.
+**Sentinel** is a next-generation security platform that uses Artificial Intelligence to detect "Insider Threats"—employees who may be compromising company data, either maliciously or accidentally.
+
+Unlike traditional security tools that just look for known bad files (viruses), Sentinel learns **behavior**. It watches how people normally work and spots when they start acting strangely.
+
+> **For the Executive:** Think of it as a digital immune system. It learns what "healthy" looks like for every employee and alerts you instantly when it detects a "symptom" of a breach, explaining the issue in plain English.
 
 ---
 
-## 🏗️ High-Level Architecture
+## 🏗️ How It Works: The Core Intelligence
 
-Sentinel employs a modular architecture designed for horizontal scalability and high-throughput real-time analysis.
+Sentinel doesn't rely on just one algorithm. It uses a **Hybrid AI Ensemble**—a team of three different AI models working together to catch what others miss.
 
+### 1. The "Whistleblower" (Isolation Forest)
+**Concept:** Imagine a crowded room. Most people are standing in groups talking. One person is standing alone in the corner wearing a mask. You spot them immediately because they are *isolated* from the norm.
+
+*   **For the Non-AI Person:** This model looks at the entire company's data and identifies actions that are mathematically rare. If 4,999 employees log in from New York and one logs in from North Korea, this model flags it.
+*   **For the AI Engineer:** We utilize an **Isolation Forest**, an unsupervised algorithm that explicitly isolates anomalies rather than profiling normal points. It constructs an ensemble of random decision trees. Anomalies (rare events) have shorter path lengths in these trees because they are easier to separate from the dense clusters of normal data. We use this for **global outlier detection**.
+
+### 2. The "Psychologist" (Behavioral Autoencoder)
+**Concept:** Your spouse knows your habits. If you suddenly buy flowers on a Tuesday when you usually only buy them on anniversaries, they know something is up. They aren't comparing you to *other people*; they are comparing you to *yourself*.
+
+*   **For the Non-AI Person:** This model learning the unique "heartbeat" of every single user. It knows that "User A usually works 9-5 and accesses Finance folders." If User A suddenly logs in at 3 AM and accesses Engineering blueprints, this model triggers an alarm, even if other people do that all the time.
+*   **For the AI Engineer:** We deploy a **Deep Autoencoder** (PyTorch). The network is trained to compress the user's login feature vector into a lower-dimensional latent space and then reconstruct it.
+    *   **Training:** It minimizes the reconstruction error (MSE) on "normal" data.
+    *   **Inference:** When an anomalous vector is fed in, the network fails to reconstruct it accurately, resulting in a **high reconstruction error**. This error magnitude becomes our "Anomaly Score."
+
+### 3. The "Analyst" (GenAI & SHAP)
+**Concept:** Getting a risk score of "95/100" is scary but useless if you don't know *why*. This component is like a human analyst standing over your shoulder, explaining the math.
+
+*   **For the Non-AI Person:** Instead of showing you a confusing chart, Sentinel reads the data and reports: *"High Risk detected: User Steve is logging in from an unusual location (Russia) at an odd hour (3 AM), which is very different from his normal behavior."*
+*   **For the AI Engineer:** We use **SHAP (SHapley Additive exPlanations)** to extract the contribution of each feature to the total anomaly score. These SHAP values tell us *which* factors (e.g., `location`, `time`, `device`) drove the score up. We then feed these top features and user context into a local **LLM (Gemma3:1B)** via a rigorously engineered prompt. The LLM translates the SHAP feature importance into a coherent, SOC-style narrative.
+
+---
+
+## 🖼️ Architecture & Flow
+
+### System Tech Stack
 ![Sentinel Architecture - Hybrid AI Engine](assets/architecture_diagram.png)
+*(3D Architecture Visual Placeholder - Awaiting Asset)*
 
-> *The architecture features a dual-stream pipeline: Statistical outlier detection (Isolation Forest) runs in parallel with deep behavioral learning (Autoencoder), converging at the GenAI interpretation layer.*
-
----
-
-## 🔄 Process Flow & Sequence
-
-The lifecycle of an event from raw telemetry to analyst notification follows a strict pipeline of scoring and narration.
-
+### Data Pipeline Sequence
 ![Sentinel Event Pipeline - Sequence Flow](assets/sequence_diagram.png)
+*(Sequence Flow Placeholder - Awaiting Asset)*
 
 ---
 
-## 📸 Interface
+## 📸 Operational Interface
 
-### Global Operations Center (`/landing`)
+### GLOBAL OPERATIONS CENTER (`/landing`)
 ![Global Operations Dashboard](assets/landing_page.png)
-*Real-time telemetry showing active threats, risk distribution, and node status.*
+**The Command Deck.** A real-time telemetry view showing the pulse of the organization. It tracks active threats, risk velocity, and system health in a single pane of glass.
 
-### Departmental Intelligence (`/dept`)
+### DEPARTMENTAL INTELLIGENCE (`/dept`)
 ![Department Analysis View](assets/dept_page.png)
-*Drill-down views into organizational units, tracking risk velocity and behavioral shifts.*
+**The Drill-Down.** A view for investigating specific organizational units. It differentiates between a "Finance" team risk pattern and an "Engineering" team risk pattern.
 
-### Identity Matrix
+### IDENTITY MATRIX (`/identities`)
 ![Identity Matrix](assets/identity_page.png)
-*Hierarchical roster of 5,000+ users with real-time risk scoring and status indicators.*
-
----
-
----
-
-## 🔬 Core Methodology
-
-### 1. Hybrid Intelligence Model
-- **Isolation Forest (Global)**: Analyzes the entire dataset to find "rare" events that stand out statistically across the whole company.
-- **Deep Autoencoder (Behavioral)**: Learns the "normal" manifold of an individual user. If a user's behavior changes relative to their own past, the reconstruction error spikes.
-- **Context-Aware Scorer:** Actively monitors HR signals. A user in "Notice Period" or "Resigned" state, or one who recently changed departments, triggers elevated scrutiny.
-- **Heuristic Rules**: Deterministic safety checks like *Impossible Travel* and *Known-Malicious Geo-Vectors*.
-
-### 2. GenAI "Interpretive" Layer
-While traditional ML gives you a score, Sentinel's **GenAI Analyst** (running local Gemma3) explains *why* the score is high. It examines the SHAP attribution coefficients and translates mathematical anomalies into human-readable narratives.
-
-### 3. Real-time Triage (Notification Center)
-The dashboard features a **Risk-Partitioned Queue**:
-- **Nominal Feed**: Low-risk telemetry for operational awareness.
-- **Anomalous Feed**: High-risk, escalated threats requiring immediate human intervention.
-
----
-
-## 🛠️ Tech Stack
-
-| Component | Technology |
-| :--- | :--- |
-| **Frontend** | React, TailwindCSS, Recharts, Lucide-React |
-| **Backend** | FastAPI, Uvicorn, Websockets |
-| **AI/ML** | PyTorch, Scikit-Learn, SHAP, Pandas |
-| **LLM** | Ollama (Gemma3:1B) |
-| **Styling** | Vanilla CSS, Glassmorphism, Neon/Red Accents |
+**The Roster.** A hierarchical breakdown of every identity in the system, color-coded by their real-time trust score.
 
 ---
 
 ## 🚀 Getting Started
 
-### Prerequisites:
-- Python 3.10+
-- Node.js & NPM
-- **Ollama** (Required for interpretive AI narratives)
-- **Gemma3:1B** (Local LLM, 815MB footprint)
+### Prerequisites
+*   **Python 3.10+** (Backend)
+*   **Node.js 18+** (Frontend)
+*   **Ollama** (for the AI Analyst)
 
-### Installation:
+### 1. Install & Run Intelligence Engine (Backend)
+The backend is powered by **FastAPI** and **PyTorch**.
+```bash
+cd backend/api
+pip install -r requirements.txt
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+```
+*Note: On first run, it will automatically check for the Gemma3 model via Ollama.*
 
-1. **Ollama Setup**:
-   Download and install Ollama from [ollama.com](https://ollama.com/). The Sentinel backend is designed to be self-healing and will attempt to start the Ollama service on `localhost:11434` and pull the required `gemma3:1b` model automatically on its first run.
-   
-   However, for the best experience, we recommend a manual pull first:
-   ```bash
-   ollama pull gemma3:1b
-   ```
+### 2. Install & Run Command Interface (Frontend)
+The frontend is built with **React, Vite, and TailwindCSS**.
+```bash
+cd frontend
+npm install
+npm run dev
+```
 
-2. **Initialize Backend**:
-   ```bash
-   cd backend
-   pip install -r requirements.txt
-   ```
-
-3. **Initialize Frontend**:
-   ```bash
-   cd ../frontend
-   npm install
-   ```
-
-## 🚀 Running the Engines
-
-1. **Launch Backend**:
-   From `backend/api`:
-   ```bash
-   uvicorn main:app --reload
-   ```
-   *Note: On first boot, the backend may pause for a few seconds to verify the local LLM connection.*
-
-2. **Launch Frontend**:
-   From `frontend`:
-   ```bash
-   npm run dev
-   ```
+### 3. Generate Data (Optional)
+To test the system at scale (1 Million Events), use the synthetic data generator:
+```bash
+python backend/scripts/generate_auth_data.py
+```
 
 ---
 
-## 🧭 Future Roadmap
-- [ ] **Graph Neural Networks (GNN)**: For lateral movement detection across identity clusters.
-- [ ] **Active Learning**: Automated model fine-tuning based on analyst feedback (Escalate/Resolve).
-- [ ] **Multi-Agent Simulation**: Simulating red-team attacks to battle-test detection thresholds.
+## 🧭 Roadmap
+*   [ ] **Graph Neural Networks (GNN)** for detecting lateral movement circles.
+*   [ ] **Reinforcement Learning (RLHF)** to let analysts "upvote/downvote" alerts to retrain the model.
+*   [ ] **Honey-Token Integration** to trap attackers who access fake files.
